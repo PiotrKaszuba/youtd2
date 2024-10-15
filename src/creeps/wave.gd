@@ -267,31 +267,28 @@ static func _calculate_base_hp(level: int, difficulty: Difficulty.enm, armor_typ
 
 	var wave_is_bonus: bool = Utils.wave_is_bonus(level)
 
-#	NOTE: extra hp multiplier can be found in jass code but
+	var constant_multiplier_bonus_wave = 41
+	var constant_multiplier = 1.05
+	var constant_multiplier_total_wave = Constants.WAVE_COUNT_NEVERENDING + constant_multiplier_bonus_wave
+	var resulting_total_multiplier = pow(constant_multiplier, max(0, level - constant_multiplier_total_wave))
+	
+	var other_formulas_effective_level = min(level, constant_multiplier_total_wave)
+
+	#	NOTE: extra hp multiplier can be found in jass code but
 #	it's located far from the code which implements the main
 #	health formula. Search for "(.9-" strings to find it in
 #	multiple locations.
-	var extra_hp_multiplier: float = (0.9 - (level * 0.002))
+	var extra_hp_multiplier: float = (0.9 - (other_formulas_effective_level * 0.002))
 	
-#	NOTE: this formula gradually reverses the direction of
-#	extra_hp_multiplier from decreasing to increasing and
-#	finally to exponential
+		
 	if wave_is_bonus:
-		var bonus_wave = level - Constants.WAVE_COUNT_NEVERENDING
-		var extra_hp_multiplier_add = 0.0
-		var constant_multiplier_wave = 71
-		var constant_multiplier = 1.04
-		if bonus_wave <= constant_multiplier_wave:
-			extra_hp_multiplier_add = pow(1.0001, pow(max(0, bonus_wave) / 2.0, 2.6)) - 1.0		
-		else:
-			extra_hp_multiplier_add = pow(1.0001, pow(constant_multiplier_wave / 2.0, 2.6)) - 1.0
-			extra_hp_multiplier_add *= pow(constant_multiplier, max(0, bonus_wave - constant_multiplier_wave))
-
+		var bonus_wave = other_formulas_effective_level - Constants.WAVE_COUNT_NEVERENDING
+		var extra_hp_multiplier_add = pow(1.0001, pow(max(0, bonus_wave) / 2.0, 2.6)) - 1.0
 		extra_hp_multiplier += extra_hp_multiplier_add
 		
-	var j: int = level - 1
+	var j: int = other_formulas_effective_level - 1
 	var health: float = a + j * (b + j * (c + j * (d + j * (e + j * (f + j * g)))))
-	health = health * extra_hp_multiplier
+	health = health * extra_hp_multiplier * resulting_total_multiplier
 
 	if armor_type == ArmorType.enm.SIF:
 		health *= Constants.SIF_CREEP_HEALTH_MULTIPLIER

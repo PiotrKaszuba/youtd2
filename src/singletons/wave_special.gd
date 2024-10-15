@@ -13,9 +13,9 @@ const _special_count_chances: Dictionary = {
 }
 
 const _special_count_chances_for_bonus_waves: Dictionary = {
-	0: 10,
-	1: 60,
-	2: 30,
+	0: 25,
+	1: 52.5,
+	2: 22.5,
 }
 
 
