@@ -291,6 +291,26 @@ func update(delta: float):
 ###       Public      ###
 #########################
 
+func get_supported_towers(with_targets: bool, only_first: bool) -> Array[Tower]:
+	var range: float = get_range() + Constants.RANGE_CHECK_BONUS_FOR_TOWERS
+	var towers_in_range: Array[Unit] = Utils.get_units_in_range(self, TargetType.new(TargetType.TOWERS), get_position_wc3_2d(), range)
+	
+	var buffgroups_supporting: Array[int] = get_buff_groups([BuffGroupMode.enm.OUTGOING, BuffGroupMode.enm.BOTH])
+	var supported_towers: Array[Tower] = []
+	var buffgroups_supported_keys: Array[int] = [BuffGroupMode.enm.INCOMING, BuffGroupMode.enm.BOTH] 
+	for buffgroup in buffgroups_supporting:
+		for s_tower in towers_in_range:
+			if len(supported_towers) > 0 and only_first:
+				return supported_towers
+			var mode: int = s_tower.get_buff_group_mode(buffgroup)
+			if buffgroups_supported_keys.has(mode):
+				if not with_targets or not (s_tower as Tower)._target_list.is_empty():
+					supported_towers.append(s_tower)
+					
+	return supported_towers
+				
+		
+
 func set_transform_is_allowed(value: bool):
 	_transform_is_allowed = value
 
@@ -624,7 +644,14 @@ func _update_target_list():
 # 	towers use their offensive abilities and items as
 # 	expected.
 	_is_in_combat = !creeps_in_range.is_empty()
-
+	
+#	[ORIGINAL_GAME_DEVIATION]
+#	tower can also be in combat if it supports a tower that has targets
+# 	or had targets in previous tick (depending on update order) through buffgroups.
+	if !_is_in_combat:
+		var supported_tower_with_targets: Array[Tower] = get_supported_towers(true, true)
+		_is_in_combat = !supported_tower_with_targets.is_empty()
+	
 #	Remove targets that have become invalid. Targets can
 #	become invalid for multiple reasons: moving out of
 #	range, dying and other.
