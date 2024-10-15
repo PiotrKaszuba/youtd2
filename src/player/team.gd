@@ -326,10 +326,11 @@ func _get_extreme_autospawn_time(level: int) -> float:
 
 func _get_bonus_wave_autospawn_time(level: int) -> float:
 	const START_TIME: float = 20.0
-	const MIN_TIME: float = 1.0
-	const REDUCTION_PER_LEVEL: float = 0.25
+	const MIN_TIME: float = 4.0
+	const GENERATION_SPEED_PER_LEVEL: float = 0.025
+	var bonus_wave = max(0, level - Constants.WAVE_COUNT_NEVERENDING)
+	var autospawn_time: float = START_TIME / (1+GENERATION_SPEED_PER_LEVEL*bonus_wave)
 
-	var autospawn_time: float = START_TIME - max(0, level - Constants.WAVE_COUNT_NEVERENDING) * REDUCTION_PER_LEVEL
 	autospawn_time = max(autospawn_time, MIN_TIME)
 
 	return autospawn_time
