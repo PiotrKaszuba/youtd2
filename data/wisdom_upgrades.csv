@@ -31,4 +31,10 @@ Increases item chance of all towers by [color=GOLD]12%[/color].",res://resources
 Increases experience gain of all towers by [color=GOLD]20%[/color].",res://resources/icons/scrolls/scroll_06.tres
 10,"Pillage Mastery
  
-Increases bounty collected by [color=GOLD]20%[/color].",res://resources/icons/swords/greatsword_01.tres
+Increases bounty collected by [color=GOLD]18%[/color].",res://resources/icons/gems/earring_01.tres
+11,"Advanced Synergy
+ 
+Increases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/electricity/electricity_yellow.tres
+12,"The Art of Ascension
+ 
+Increases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/animals/wing.tres
