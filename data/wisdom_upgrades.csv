@@ -32,9 +32,18 @@ Increases experience gain of all towers by [color=GOLD]20%[/color].",res://resou
 10,"Pillage Mastery
  
 Increases bounty collected by [color=GOLD]18%[/color].",res://resources/icons/gems/earring_01.tres
-11,"Advanced Synergy
+11,"Resilience
+ 
+Decreases duration of debuffs on all towers by [color=GOLD]7.5%[/color].",res://resources/icons/statues/statue_03.tres
+12,"Longevity
+ 
+Increases duration of buffs on all towers by [color=GOLD]6%[/color].",res://resources/icons/tower_icons/polar_bear_cub.tres
+13,"Power of Friendship
+ 
+Increases starting lives by [color=GOLD]20%[/color].",res://resources/icons/faces/woman_02.tres
+14,"Advanced Synergy
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/electricity/electricity_yellow.tres
-12,"The Art of Ascension
+15,"The Art of Ascension
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/animals/wing.tres
