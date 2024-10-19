@@ -43,7 +43,7 @@ Increases duration of buffs on all towers by [color=GOLD]6%[/color].",res://reso
 Increases starting lives by [color=GOLD]20%[/color].",res://resources/icons/faces/woman_02.tres
 14,"Foundation of Knowledge
  
-All tower start with [color=GOLD]30 experience[/color].",res://resources/icons/faces/man_02.tres
+All tower start with [color=GOLD]30[/color] experience.",res://resources/icons/faces/man_02.tres
 15,"Deadly Strikes
  
 Increases attack and spell critical damage of all towers by [color=GOLD]17.5%[/color].",res://resources/icons/swords/sword_swing_01.tres
