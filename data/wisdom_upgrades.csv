@@ -31,19 +31,31 @@ Increases item chance of all towers by [color=GOLD]12%[/color].",res://resources
 Increases experience gain of all towers by [color=GOLD]20%[/color].",res://resources/icons/scrolls/scroll_06.tres
 10,"Pillage Mastery
  
-Increases bounty collected by [color=GOLD]18%[/color].",res://resources/icons/gems/earring_01.tres
-11,"Resilience
+Increases bounty collected by [color=GOLD]16%[/color].",res://resources/icons/gems/earring_01.tres
+11,"Fortified Will
  
 Decreases duration of debuffs on all towers by [color=GOLD]7.5%[/color].",res://resources/icons/statues/statue_03.tres
-12,"Longevity
+12,"Inner Focus
  
 Increases duration of buffs on all towers by [color=GOLD]6%[/color].",res://resources/icons/tower_icons/polar_bear_cub.tres
-13,"Power of Friendship
+13,"Bond of Unity
  
 Increases starting lives by [color=GOLD]20%[/color].",res://resources/icons/faces/woman_02.tres
-14,"Advanced Synergy
+14,"Foundation of Knowledge
+ 
+All tower start with [color=GOLD]30 experience[/color].",res://resources/icons/faces/man_02.tres
+15,"Deadly Strikes
+ 
+Increases attack and spell critical damage of all towers by [color=GOLD]17.5%[/color].",res://resources/icons/swords/sword_swing_01.tres
+16,"Fortune's Favor
+ 
+Increases item quality of all towers by [color=GOLD]6.5%[/color].",res://resources/icons/rings/ring_02.tres
+17,"Challenge Conqueror
+ 
+Increases damage dealt to Challenge enemies by [color=GOLD]8%[/color].",res://resources/icons/misc/red_knight.tres
+18,"Advanced Synergy
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/electricity/electricity_yellow.tres
-15,"The Art of Ascension
+19,"The Art of Ascension
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/animals/wing.tres
