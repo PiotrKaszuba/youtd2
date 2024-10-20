@@ -619,8 +619,9 @@ func _load_tower_ranges_map() -> Dictionary:
 		var radius: float = properties[TowerProperties.RangeColumn.RADIUS].to_float()
 		var targets_creeps_string: String = properties[TowerProperties.RangeColumn.TARGETS_CREEPS]
 		var targets_creeps: bool = targets_creeps_string == "TRUE"
-
-		var range_data: RangeData = RangeData.new(range_name, radius)
+		
+		var is_normal_attack: bool = range_name == 'Normal attack'
+		var range_data: RangeData = RangeData.new(range_name, radius, null, is_normal_attack)
 		range_data.targets_creeps = targets_creeps
 
 		result[tower_id].append(range_data)
