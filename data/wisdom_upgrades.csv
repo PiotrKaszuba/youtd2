@@ -61,7 +61,7 @@ Increases total damage dealt by towers by [color=GOLD]2%[/color].",res://resourc
 Increases normal attack range of all towers by [color=GOLD]20[/color].",res://resources/icons/cannons/cannon_02.tres
 20,"Elemental Overload
  
-Increases maximum element level by [color=GOLD]3[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/hud/gem_all_rarities.tres
+Increases maximum element level by [color=GOLD]2[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/hud/gem_all_rarities.tres
 21,"Pinnacle of Power
  
 Increases maximum tower level by [color=GOLD]2[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/holy/altar.tres
