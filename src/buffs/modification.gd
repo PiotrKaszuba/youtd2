@@ -22,7 +22,10 @@ enum Type {
 	MOD_DMG_TO_ORC,
 	MOD_DMG_TO_HUMANOID,
 	MOD_DMG_TO_CHALLENGE,
-
+	
+#	Total damage multiplier after crit and tower damage event	
+	MOD_DMG_TOTAL_MULTIPLIER,
+	
 # 	Crit modifications
 
 #	Modifies the chance that attacks of this unit will be
@@ -381,7 +384,9 @@ func _get_type_name() -> String:
 		Type.MOD_DMG_TO_ORC: return "damage to orcs"
 		Type.MOD_DMG_TO_HUMANOID: return "damage to humanoids"
 		Type.MOD_DMG_TO_CHALLENGE: return "damage to challenge"
-
+		
+		Type.MOD_DMG_TOTAL_MULTIPLIER: return "total damage multiplier"
+		
 		Type.MOD_DMG_FROM_ASTRAL: return "damage from astral"
 		Type.MOD_DMG_FROM_DARKNESS: return "damage from darkness"
 		Type.MOD_DMG_FROM_NATURE: return "damage from nature"
