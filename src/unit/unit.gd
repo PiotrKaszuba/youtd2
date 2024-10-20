@@ -91,8 +91,12 @@ var _base_mana_regen: float = 0.0
 var _base_armor: float = 0.0
 var _kill_count: int = 0
 var _best_hit: float = 0.0
+var _attack_damage_dealt: float = 0.0
+var _spell_damage_dealt: float = 0.0
 var _damage_dealt_total: float = 0.0
 var _damage_dealt_to_wave_map: Dictionary = {}
+var _attack_damage_dealt_to_wave_map: Dictionary = {}
+var _spell_damage_dealt_to_wave_map: Dictionary = {}
 var _ethereal_count: int = 0
 var _silence_count: int = 0
 var _stun_count: int = 0
@@ -186,6 +190,8 @@ var _mod_value_map: Dictionary = {
 	ModificationType.enm.MOD_DMG_FROM_ICE: 1.0,
 	ModificationType.enm.MOD_DMG_FROM_STORM: 1.0,
 	ModificationType.enm.MOD_DMG_FROM_IRON: 1.0,
+	
+	ModificationType.enm.MOD_DMG_TOTAL_MULTIPLIER: 1.0,
 }
 
 
@@ -908,6 +914,9 @@ func _do_damage(target: Unit, damage_base: float, crit_ratio: float, damage_sour
 #	damage ***AFTER*** the onDamage event, so there is no
 #	need to care about it in this trigger."
 	damage *= crit_ratio
+	
+	var total_damage_multiplier: float = get_total_damage_multiplier()
+	damage *= total_damage_multiplier
 
 	var damage_before_damaged_event: float = damage
 
@@ -941,8 +950,19 @@ func _do_damage(target: Unit, damage_base: float, crit_ratio: float, damage_sour
 	
 	if !_damage_dealt_to_wave_map.has(wave_level):
 		_damage_dealt_to_wave_map[wave_level] = 0
-	
+	if !_attack_damage_dealt_to_wave_map.has(wave_level):
+		_attack_damage_dealt_to_wave_map[wave_level] = 0
+	if !_spell_damage_dealt_to_wave_map.has(wave_level):
+		_spell_damage_dealt_to_wave_map[wave_level] = 0
+		
 	_damage_dealt_to_wave_map[wave_level] += damage
+	
+	if damage_source == DamageSource.Spell:
+		_spell_damage_dealt += damage
+		_spell_damage_dealt_to_wave_map[wave_level] += damage
+	if damage_source == DamageSource.Attack:
+		_attack_damage_dealt += damage
+		_attack_damage_dealt_to_wave_map[wave_level] += damage
 
 	if damage > _best_hit:
 		_best_hit = damage
@@ -1798,6 +1818,8 @@ func get_damage_to_size(creep_size: CreepSize.enm) -> float:
 
 	return damage_mod
 
+func get_total_damage_multiplier() -> float:
+	return max(0, _mod_value_map[ModificationType.enm.MOD_DMG_TOTAL_MULTIPLIER])
 
 func get_attack_type() -> AttackType.enm:
 	return AttackType.enm.PHYSICAL
