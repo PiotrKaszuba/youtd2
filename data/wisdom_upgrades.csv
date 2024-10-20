@@ -53,9 +53,12 @@ Increases item quality of all towers by [color=GOLD]6.5%[/color].",res://resourc
 17,"Challenge Conqueror
  
 Increases damage dealt to Challenge enemies by [color=GOLD]8%[/color].",res://resources/icons/misc/red_knight.tres
-18,"Advanced Synergy
+18,"Master of Destruction
+ 
+Increases total damage dealt by towers by [color=GOLD]2%[/color].",res://resources/icons/helmets/crown_01.tres
+19,"Advanced Synergy
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/electricity/electricity_yellow.tres
-19,"The Art of Ascension
+20,"The Art of Ascension
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/animals/wing.tres
