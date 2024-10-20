@@ -82,8 +82,9 @@ static func _get_range_data_from_tower(tower: Tower) -> Array[RangeData]:
 		var ability_has_range: bool = ability_info.radius != 0
 		if !ability_has_range:
 			continue
-
-		var range_data: RangeData = RangeData.new(ability_info.name, ability_info.radius, ability_info.target_type)
+		
+		var is_attack: bool = ability_info.name == 'Normal attack'
+		var range_data: RangeData = RangeData.new(ability_info.name, ability_info.radius, ability_info.target_type, is_attack)
 		range_data.affected_by_builder = false
 		list.append(range_data)
 	
