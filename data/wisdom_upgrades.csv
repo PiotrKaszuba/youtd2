@@ -62,9 +62,12 @@ Increases normal attack range of all towers by [color=GOLD]20[/color].",res://re
 20,"Elemental Overload
  
 Increases maximum element level by [color=GOLD]3[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/hud/gem_all_rarities.tres
-21,"Advanced Synergy
+21,"Pinnacle of Power
+ 
+Increases maximum tower level by [color=GOLD]2[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/holy/altar.tres
+22,"Advanced Synergy
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/electricity/electricity_yellow.tres
-22,"The Art of Ascension
+23,"The Art of Ascension
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/animals/wing.tres
