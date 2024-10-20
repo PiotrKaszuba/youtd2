@@ -59,9 +59,12 @@ Increases total damage dealt by towers by [color=GOLD]2%[/color].",res://resourc
 19,"Advanced Optics
  
 Increases normal attack range of all towers by [color=GOLD]20[/color].",res://resources/icons/cannons/cannon_02.tres
-20,"Advanced Synergy
+20,"Elemental Overload
+ 
+Increases maximum element level by [color=GOLD]3[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/hud/gem_all_rarities.tres
+21,"Advanced Synergy
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/electricity/electricity_yellow.tres
-21,"The Art of Ascension
+22,"The Art of Ascension
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/animals/wing.tres
