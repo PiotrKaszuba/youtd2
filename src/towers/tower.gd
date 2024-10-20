@@ -401,13 +401,18 @@ func _get_attack_ability_description() -> String:
 	
 	var tower_id: int = get_id()
 
-	var attack_range: int = floor(TowerProperties.get_range(tower_id))
+	var base_attack_range: int = floor(get_base_range())
+	var bonus_attack_range: int = floor(get_range() - base_attack_range)
 	var attack_type: AttackType.enm = TowerProperties.get_attack_type(tower_id)
 	var damage_dealt_string: String = AttackType.get_rich_text_for_damage_dealt(attack_type)
 	var attack_type_string: String = AttackType.convert_to_colored_string(attack_type)
-
+	
+	var bonus_range_str: String = ""
+	if bonus_attack_range != 0:
+		bonus_range_str = " + %s" % bonus_attack_range
+	
 	text += "Attack type: %s.\n" % attack_type_string \
-	+ "Range: %s\n" % attack_range \
+	+ "Range: %s%s\n" % [base_attack_range, bonus_range_str] \
 	+ " \n" \
 	+ "Damage to:\n" \
 	+ "%s" % damage_dealt_string
