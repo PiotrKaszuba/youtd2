@@ -56,9 +56,12 @@ Increases damage dealt to Challenge enemies by [color=GOLD]8%[/color].",res://re
 18,"Master of Destruction
  
 Increases total damage dealt by towers by [color=GOLD]2%[/color].",res://resources/icons/helmets/crown_01.tres
-19,"Advanced Synergy
+19,"Advanced Optics
+ 
+Increases normal attack range of all towers by [color=GOLD]20[/color].",res://resources/icons/cannons/cannon_02.tres
+20,"Advanced Synergy
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/electricity/electricity_yellow.tres
-20,"The Art of Ascension
+21,"The Art of Ascension
  
 Increases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",res://resources/icons/animals/wing.tres
