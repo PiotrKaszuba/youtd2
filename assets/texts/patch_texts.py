@@ -36,7 +36,7 @@ full = [
     (20, "WU20", "Elemental Overload"),
     (21, "WU21", "Pinnacle of Power"),
     (22, "WU22", "Advanced Synergy"),
-    (23, "WU23", "The Art of Ascension"),
+    (23, "WU23", "The Path of Ascension"),
 ]
 id_to_key = {i: k for i, k, _ in full}
 id_to_name = {i: n for i, _, n in full}
@@ -67,7 +67,7 @@ id_to_en_tooltip = {
 20: "Elemental Overload\n \nIncreases maximum element level by [color=GOLD]2[/color] (unaffected by Wisdom Upgrade effectiveness).",
 21: "Pinnacle of Power\n \nIncreases maximum tower level by [color=GOLD]2[/color] (unaffected by Wisdom Upgrade effectiveness).",
 22: "Advanced Synergy\n \nIncreases effectiveness of other Wisdom Upgrades by [color=GOLD]6%[/color] (unaffected by Wisdom Upgrade effectiveness).",
-23: "The Art of Ascension\n \nIncreases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",
+23: "The Path of Ascension\n \nIncreases effectiveness of other Wisdom Upgrades by [color=GOLD]0.1%[/color] for every player level unspent on upgrades (unaffected by Wisdom Upgrade effectiveness).",
 }
 
 # --- Chinese (existing for 0..9) ---------------------------------------------
