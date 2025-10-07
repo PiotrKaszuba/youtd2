@@ -96,8 +96,12 @@ func set_paused_by_host(value: bool):
 
 # Send action from client to host
 func add_action(action: Action):
-	var serialized_action: Dictionary = action.serialize()
-	_game_host.receive_action.rpc_id(1, serialized_action)
+        var serialized_action: Dictionary = action.serialize()
+        _game_host.receive_action.rpc_id(1, serialized_action)
+
+
+func get_current_tick() -> int:
+        return _current_tick
 
 
 @rpc("authority", "call_local", "reliable")
@@ -227,42 +231,27 @@ func _do_tick():
 			_execute_action(action)
 
 		var time_to_send_checksum: bool = _current_tick % CHECKSUM_PERIOD_TICKS == 0
-		if time_to_send_checksum:
-			var checksum: PackedByteArray = _calculate_game_state_checksum()
-			_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
+                if time_to_send_checksum:
+                        var checksum: Dictionary = _calculate_game_state_checksum()
+                        _game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
 
 	_update_state()
 	_current_tick += 1
 
 
-func _calculate_game_state_checksum():
-	var ctx: HashingContext = HashingContext.new()
-	ctx.start(HashingContext.HASH_MD5)
+func _calculate_game_state_checksum() -> Dictionary:
+        var builder := GameStateSnapshotBuilder.new()
+        var snapshot_root := builder.build(_current_tick)
+        var hash_type: int = HashingContext.HASH_SHA256
+        var root_bytes: PackedByteArray = snapshot_root.get_hash_bytes(hash_type)
+        var parts: Dictionary = snapshot_root.collect_hashes("", true, hash_type)
 
-	var game_state: PackedByteArray = PackedByteArray()
-
-	var player_list: Array[Player] = PlayerManager.get_player_list()
-
-	for player in player_list:
-		var total_damage: int = floori(player.get_total_damage())
-		var gold_farmed: int = floori(player.get_gold_farmed())
-		var gold: int = floori(player.get_gold())
-		var tomes: int = player.get_tomes()
-		var lives: int = floori(player.get_team().get_lives_percent())
-		var level: int = player.get_team().get_level()
-
-		game_state.append(total_damage)
-		game_state.append(gold_farmed)
-		game_state.append(gold)
-		game_state.append(tomes)
-		game_state.append(lives)
-		game_state.append(level)
-
-	ctx.update(game_state)
-
-	var checksum: PackedByteArray = ctx.finish()
-
-	return checksum
+        return {
+                "version": 1,
+                "hash_type": hash_type,
+                "root": root_bytes,
+                "parts": var_to_bytes(parts),
+        }
 
 
 # NOTE: need to implement this with a match statement

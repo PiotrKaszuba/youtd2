@@ -28,6 +28,9 @@ class_name GameScene extends Node
 
 var _ui_input_is_enabled: bool = false
 var _map: Map = null
+var _pending_snapshot_verification: Dictionary = {}
+var _restoring_from_archive: bool = false
+var _restore_meta: Dictionary = {}
 
 
 #########################
@@ -35,11 +38,15 @@ var _map: Map = null
 #########################
 
 func _ready():
-	print_verbose("GameScene has loaded.")
-	
-	Globals.reset()
-	PlayerManager.reset()
-	GroupManager.reset()
+        if _restoring_from_archive:
+                _handle_restored_ready()
+                return
+
+        print_verbose("GameScene has loaded.")
+
+        Globals.reset()
+        PlayerManager.reset()
+        GroupManager.reset()
 
 #	Replace small map with big map if playing in multiplayer
 #	NOTE: need to swap instead of using big map for both
@@ -156,8 +163,8 @@ func _ready():
 	if Config.run_test_items_tool():
 		TestItemsTool.run(self, local_player)
 
-	if Config.run_test_horadric_tool():
-		TestHoradricTool.run(local_player)
+        if Config.run_test_horadric_tool():
+                TestHoradricTool.run(local_player)
 
 	if Config.run_auto_playtest_bot():
 		PlaytestBot.run(_build_space)
@@ -247,6 +254,33 @@ func get_build_space() -> BuildSpace:
 	return _build_space
 
 
+func get_current_tick() -> int:
+	return _game_client.get_current_tick()
+
+
+func save_game_state() -> void:
+	var builder := GameStateSnapshotBuilder.new()
+	var snapshot_root := builder.build(get_current_tick())
+	var hash_type: int = HashingContext.HASH_SHA256
+	var error: Error = GameStateArchiver.save(self, snapshot_root, hash_type)
+
+	if error == OK:
+		_notify_local_player(tr("Game saved."))
+	else:
+		_notify_local_player(tr("Failed to save game. Error: {ERROR}").format({"ERROR": error}), true)
+
+
+func load_game_state() -> void:
+	var error: Error = GameStateArchiver.load(get_tree())
+
+	if error != OK:
+		_notify_local_player(tr("Failed to load game. Error: {ERROR}").format({"ERROR": error}), true)
+
+
+func begin_restore(meta: Dictionary) -> void:
+	_restoring_from_archive = true
+	_restore_meta = meta.duplicate(true)
+
 #########################
 ###      Private      ###
 #########################
@@ -254,21 +288,37 @@ func get_build_space() -> BuildSpace:
 # Disables/enables all input (except builder menu)
 func _set_ui_input_enabled(enabled: bool):
 	_shadow_below_builder_menu.visible = !enabled
-	
+
 	_ui_input_is_enabled = enabled
 	_camera_controller.set_any_input_enabled(enabled)
-	
+
 	var hud_process_mode: ProcessMode
 	if enabled:
 		hud_process_mode = ProcessMode.PROCESS_MODE_PAUSABLE
 	else:
 		hud_process_mode = ProcessMode.PROCESS_MODE_DISABLED
-		
+
 	_hud.set_process_mode(hud_process_mode)
 
 
-func _save_player_exp_on_quit():
+func _notify_local_player(message: String, is_error: bool = false) -> void:
 	var local_player: Player = PlayerManager.get_local_player()
+
+	if local_player == null:
+		if is_error:
+			Utils.add_ui_error(null, message)
+		else:
+			Messages.add_normal(null, message)
+		return
+
+	if is_error:
+		Utils.add_ui_error(local_player, message)
+	else:
+		Messages.add_normal(local_player, message)
+
+
+func _save_player_exp_on_quit():
+        var local_player: Player = PlayerManager.get_local_player()
 	var local_team: Team = local_player.get_team()
 
 #	NOTE: if finished the game, then don't save exp because
@@ -557,18 +607,90 @@ func _get_cmdline_value(key: String):
 # some abilities may add new objects when another object is
 # removed.
 func _cleanup_all_objects():
-	while _object_container.get_child_count() > 0:
-		var child_list: Array[Node] = _object_container.get_children()
+        while _object_container.get_child_count() > 0:
+                var child_list: Array[Node] = _object_container.get_children()
 
-		for child in child_list:
+                for child in child_list:
 #			NOTE: need to check if child is inside tree
 #			because when objects are deleted they can delete
 #			other objects.
 			if !child.is_inside_tree():
 				continue
 			
-			_object_container.remove_child(child)
-			child.queue_free()
+                        _object_container.remove_child(child)
+                        child.queue_free()
+
+
+func _verify_loaded_snapshot() -> void:
+        var hash_type: int = int(_pending_snapshot_verification.get("hash_type", HashingContext.HASH_SHA256))
+        var expected_hash: String = str(_pending_snapshot_verification.get("snapshot_hash", ""))
+        var expected_parts_variant = _pending_snapshot_verification.get("snapshot_parts", {})
+        var expected_parts: Dictionary = {}
+
+        if typeof(expected_parts_variant) == TYPE_DICTIONARY:
+                expected_parts = expected_parts_variant
+
+        var builder := GameStateSnapshotBuilder.new()
+        var snapshot_root := builder.build(get_current_tick())
+        var actual_hash: String = snapshot_root.get_hash_hex(hash_type)
+
+        if actual_hash == expected_hash:
+                _notify_local_player(tr("Save loaded successfully."))
+                _pending_snapshot_verification = {}
+                return
+
+        var actual_parts: Dictionary = snapshot_root.collect_hashes("", true, hash_type)
+        var differing_paths: Array[String] = []
+
+        for path in expected_parts.keys():
+                var expected_value: String = expected_parts[path]
+                var actual_value: String = actual_parts.get(path, "")
+
+                if expected_value != actual_value:
+                        differing_paths.append(path)
+
+        for path in actual_parts.keys():
+                if expected_parts.has(path):
+                        continue
+                differing_paths.append(path)
+
+        differing_paths.sort()
+
+        var preview: String = ""
+        if !differing_paths.is_empty():
+                var limit: int = min(3, differing_paths.size())
+                var preview_list: Array = differing_paths.slice(0, limit)
+                preview = ", ".join(preview_list)
+
+        _notify_local_player(tr("Loaded game state verification failed."), true)
+        print_debug("Loaded game state hash mismatch. expected %s got %s" % [expected_hash, actual_hash])
+
+        if !preview.is_empty():
+                print_debug("First differing paths: %s" % preview)
+
+        _pending_snapshot_verification = {}
+
+
+func _handle_restored_ready() -> void:
+        print_verbose("GameScene restored from archive.")
+
+        var rng_state = _restore_meta.get("rng_state", null)
+        var rng_position = _restore_meta.get("rng_position", null)
+        var rng_call_count = _restore_meta.get("rng_call_count", null)
+
+        if rng_state != null and Globals.synced_rng.has_method("set_state"):
+                Globals.synced_rng.set_state(rng_state)
+        if rng_position != null and Globals.synced_rng.has_method("set_position"):
+                Globals.synced_rng.set_position(rng_position)
+        if rng_call_count != null and Globals.synced_rng.has_method("set_call_count"):
+                Globals.synced_rng.set_call_count(rng_call_count)
+
+        _pending_snapshot_verification = _restore_meta.duplicate(true)
+        _restoring_from_archive = false
+        _restore_meta = {}
+
+        if !_pending_snapshot_verification.is_empty():
+                _verify_loaded_snapshot()
 
 
 #########################
@@ -871,12 +993,20 @@ func _on_player_requested_to_sort_item_stash():
 
 
 func _on_player_requested_help():
-	_toggle_game_menu()
-	_game_menu.switch_to_help_menu()
+        _toggle_game_menu()
+        _game_menu.switch_to_help_menu()
+
+
+func _on_game_menu_save_pressed():
+        save_game_state()
+
+
+func _on_game_menu_load_pressed():
+        load_game_state()
 
 
 func _on_game_menu_quit_pressed():
-	_quit_to_title()
+        _quit_to_title()
 
 
 func _on_player_requested_quit_to_title():

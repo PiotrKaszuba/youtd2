@@ -113,18 +113,35 @@ func transfer_autooils(prev_tower: Tower, new_tower: Tower):
 func clear_all():
 	for tower in _data.values():
 		_disconnect_tower(tower)
-	
+
 	_data.clear()
 
 
 func clear_for_tower(tower: Tower):
 	for oil_type in _data.keys():
 		var assigned_tower: Tower = _data[oil_type]
-		
+
 		if assigned_tower == tower:
 			_data[oil_type] = null
-	
+
 	_disconnect_tower(tower)
+
+
+func build_snapshot(node: SnapshotNode):
+        var assignments: Dictionary = {}
+        var oil_types: Array = _data.keys()
+        oil_types.sort()
+
+        for oil_type in oil_types:
+                var tower: Tower = _data[oil_type]
+                var tower_uid: int = -1
+
+                if tower != null && is_instance_valid(tower):
+                        tower_uid = tower.get_uid()
+
+                assignments[oil_type] = tower_uid
+
+        node.add_field("assignments", assignments)
 
 
 #########################

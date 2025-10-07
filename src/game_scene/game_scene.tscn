@@ -509,5 +509,7 @@ layout_mode = 2
 [connection signal="tutorial_triggered" from="Gameplay/TutorialController" to="." method="_on_tutorial_controller_tutorial_triggered"]
 [connection signal="finished" from="UI/BuilderMenu" to="." method="_on_builder_menu_finished"]
 [connection signal="continue_pressed" from="UI/GameMenu" to="." method="_on_game_menu_continue_pressed"]
+[connection signal="save_pressed" from="UI/GameMenu" to="." method="_on_game_menu_save_pressed"]
+[connection signal="load_pressed" from="UI/GameMenu" to="." method="_on_game_menu_load_pressed"]
 [connection signal="quit_pressed" from="UI/GameMenu" to="." method="_on_game_menu_quit_pressed"]
 [connection signal="hidden" from="UI/VBoxContainer/TutorialMenu" to="." method="_on_tutorial_menu_hidden"]

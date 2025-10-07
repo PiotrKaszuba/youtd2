@@ -10,6 +10,8 @@ enum Tab {
 
 
 signal continue_pressed()
+signal save_pressed()
+signal load_pressed()
 signal quit_pressed()
 
 
@@ -34,11 +36,19 @@ func _on_help_button_pressed():
 
 
 func _on_settings_button_pressed():
-	_tab_container.current_tab = Tab.SETTINGS
+        _tab_container.current_tab = Tab.SETTINGS
+
+
+func _on_save_button_pressed() -> void:
+        save_pressed.emit()
+
+
+func _on_load_button_pressed() -> void:
+        load_pressed.emit()
 
 
 func _on_hidden():
-	_tab_container.current_tab = Tab.MAIN
+        _tab_container.current_tab = Tab.MAIN
 
 
 func _on_help_menu_closed():

@@ -57,7 +57,7 @@ var _turn_length: int
 var _in_progress_timeslot: Array = []
 var _player_ping_time_map: Dictionary = {}
 var _player_last_contact_time: Dictionary = {}
-# {tick -> {player_id -> checksum}}
+# {tick -> {player_id -> {"hash_type": int, "root": PackedByteArray, "root_hex": String, "parts": Dictionary}}}
 var _checksum_map: Dictionary = {}
 var _showed_desync_indicator: bool = false
 # Stores timeslots which should be sent to players and
@@ -129,7 +129,7 @@ func receive_action(action: Dictionary):
 # disconnected, then need to not count him when determining
 # whether host has collected checksums from all players.
 @rpc("any_peer", "call_local", "reliable")
-func receive_timeslot_checksum(tick: int, checksum: PackedByteArray):
+func receive_timeslot_checksum(tick: int, checksum: Dictionary):
 	var peer_id: int = multiplayer.get_remote_sender_id()
 	var player: Player = PlayerManager.get_player_by_peer_id(peer_id)
 	var player_id: int = player.get_id()
@@ -137,7 +137,7 @@ func receive_timeslot_checksum(tick: int, checksum: PackedByteArray):
 	if !_checksum_map.has(tick):
 		_checksum_map[tick] = {}
 
-	_checksum_map[tick][player_id] = checksum
+        _checksum_map[tick][player_id] = _normalize_checksum_payload(checksum)
 
 	var player_list: Array[Player] = PlayerManager.get_player_list()
 	var player_count: int = player_list.size()
@@ -287,21 +287,70 @@ func _verify_checksums(tick: int):
 	var authority_player: Player = PlayerManager.get_player_by_peer_id(1)
 	var authority_player_id: int = authority_player.get_id()
 
-	var authority_checksum: PackedByteArray = player_to_checksum[authority_player_id]
+        var authority_checksum: Dictionary = player_to_checksum[authority_player_id]
+        var authority_root: PackedByteArray = authority_checksum.get("root", PackedByteArray())
+        
+        var player_list: Array[Player] = PlayerManager.get_player_list()
 
-	var player_list: Array[Player] = PlayerManager.get_player_list()
+        for player in player_list:
+                var player_id: int = player.get_id()
+                var checksum: Dictionary = player_to_checksum[player_id]
+                var player_root: PackedByteArray = checksum.get("root", PackedByteArray())
+                var checksum_match: bool = player_root == authority_root
 
-	for player in player_list:
-		var player_id: int = player.get_id()
-		var checksum: PackedByteArray = player_to_checksum[player_id]
-		var checksum_match: bool = checksum == authority_checksum
-
-		if !checksum_match:
-			desync_detected = true
+                if !checksum_match:
+                        desync_detected = true
+                        _log_checksum_difference(tick, player, authority_checksum, checksum)
 
 	if desync_detected && !_showed_desync_indicator:
-		_hud.show_desync_indicator()
-		_showed_desync_indicator = true
+	        _hud.show_desync_indicator()
+	        _showed_desync_indicator = true
+
+
+func _log_checksum_difference(tick: int, player: Player, authority_checksum: Dictionary, player_checksum: Dictionary):
+        var authority_hashes: Dictionary = authority_checksum.get("parts", {})
+        var player_hashes: Dictionary = player_checksum.get("parts", {})
+
+	var differing_paths: Array[String] = []
+	for path in authority_hashes.keys():
+	        var expected_hash: String = authority_hashes[path]
+	        var actual_hash: String = player_hashes.get(path, "")
+
+	        if expected_hash != actual_hash:
+	                differing_paths.append(path)
+
+	differing_paths.sort()
+
+	if differing_paths.is_empty():
+	        print_debug("Desync detected at tick %d for %s but no differing paths were found" % [tick, player.get_player_name()])
+	        return
+
+	var first_differences: Array[String] = differing_paths.slice(0, min(3, differing_paths.size()))
+        var message: String = "Desync at tick %d for %s. First differing paths: %s" % [
+                tick,
+                player.get_player_name(),
+                ", ".join(first_differences),
+        ]
+        print_debug(message)
+
+
+func _normalize_checksum_payload(raw_checksum: Dictionary) -> Dictionary:
+        var hash_type: int = raw_checksum.get("hash_type", HashingContext.HASH_SHA256)
+        var root_bytes: PackedByteArray = raw_checksum.get("root", PackedByteArray())
+        var parts_bytes: PackedByteArray = raw_checksum.get("parts", PackedByteArray())
+        var parts: Dictionary = {}
+
+        if parts_bytes.size() > 0:
+                var decoded = bytes_to_var(parts_bytes, false)
+                if typeof(decoded) == TYPE_DICTIONARY:
+                        parts = decoded
+
+        return {
+                "hash_type": hash_type,
+                "root": root_bytes,
+                "root_hex": root_bytes.hex_encode(),
+                "parts": parts,
+        }
 
 
 func _get_player_name_list(player_list: Array[Player]) -> Array[String]:

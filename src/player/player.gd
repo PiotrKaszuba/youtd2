@@ -677,6 +677,46 @@ func emit_game_lose_signal():
 	game_lose.emit()
 
 
+func build_snapshot(node: SnapshotNode):
+	node.add_field("id", _id)
+	node.add_field("peer_id", _peer_id)
+	node.add_field("user_id", _user_id)
+	node.add_field("player_name", _player_name)
+	node.add_field("total_damage", _total_damage)
+	node.add_field("tower_count_for_starting_roll", _tower_count_for_starting_roll)
+	node.add_field("max_element_level_bonus", _max_element_level_bonus)
+	node.add_field("max_tower_level_bonus", _max_tower_level_bonus)
+	node.add_field("food", _food)
+	node.add_field("food_cap", _food_cap)
+	node.add_field("income_rate", _income_rate)
+	node.add_field("interest_rate", _interest_rate)
+	node.add_field("gold", _gold)
+	node.add_field("gold_farmed", _gold_farmed)
+	node.add_field("tomes", _tomes)
+	node.add_field("score", _score)
+	node.add_field("is_ready", _is_ready)
+	node.add_field("focus_target_effect_id", _focus_target_effect_id)
+	node.add_field("builder_wisdom_multiplier", _builder_wisdom_multiplier)
+	node.add_field("attack_range_bonus", _attack_range_bonus)
+	node.add_field("tower_exp_bonus", _tower_exp_bonus)
+	node.add_field("chat_ignored", _chat_ignored)
+	node.add_field("have_placeholder_builder", _have_placeholder_builder)
+
+	var team_id: int = -1
+	if _team != null:
+		team_id = _team.get_id()
+	node.add_field("team_id", team_id)
+
+	var builder_id: int = -1
+	if _builder != null:
+		builder_id = _builder.get_id()
+	node.add_field("builder_id", builder_id)
+
+	node.add_field("element_levels", _get_element_level_snapshot())
+
+	var autooil_node := node.create_child("autooil")
+	_autooil.build_snapshot(autooil_node)
+
 #########################
 ###      Private      ###
 #########################
@@ -687,6 +727,16 @@ func _set_gold(value: float):
 
 func _set_tomes(value):
 	_tomes = clampi(value, 0, MAX_KNOWLEDGE_TOMES)
+
+
+func _get_element_level_snapshot() -> Dictionary:
+        var result: Dictionary = {}
+
+        for element in Element.get_list():
+                var element_key: String = Element.convert_to_string(element)
+                result[element_key] = get_element_level(element)
+
+        return result
 
 
 func _add_message_about_rolled_towers(rolled_towers: Array[int]):

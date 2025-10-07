@@ -203,6 +203,26 @@ func get_allow_shared_build_space() -> bool:
 	return _allow_shared_build_space
 
 
+func build_snapshot(node: SnapshotNode):
+	node.add_field("id", _id)
+	node.add_field("lives", _lives)
+	node.add_field("level", _level)
+	node.add_field("finished_the_game", _finished_the_game)
+	node.add_field("player_defined_autospawn_time", _player_defined_autospawn_time)
+	node.add_field("allow_shared_build_space", _allow_shared_build_space)
+	node.add_field("wave_in_progress", get_wave_is_in_progress())
+
+	var player_ids: Array[int] = []
+	for player in _player_list:
+	        player_ids.append(player.get_id())
+	player_ids.sort()
+	node.add_field("player_ids", player_ids)
+
+	SnapshotNode.write_manual_timer(node, "next_wave_timer", _next_wave_timer)
+	SnapshotNode.write_timer(node, "portal_damage_sound_cooldown_timer", _portal_damage_sound_cooldown_timer)
+	SnapshotNode.write_manual_timer(node, "start_wave_action_cooldown_timer", _start_wave_action_cooldown_timer)
+
+
 #########################
 ###      Private      ###
 #########################
