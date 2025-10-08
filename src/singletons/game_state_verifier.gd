@@ -1,5 +1,5 @@
 extends Node
-class_name GameStateVerifier
+#class_name GameStateVerifier
 
 
 static var _expected_hash_tree: Dictionary = {}
@@ -132,8 +132,11 @@ static func _attach_hashes(node: Dictionary) -> Dictionary:
 		buffer.append_array(var_to_bytes_with_objects(properties[key]))
 	for child_dict in hashed_children:
 		buffer.append_array(Marshalls.base64_to_raw(child_dict.get("hash", "")))
-
-	var digest: PackedByteArray = Crypto.digest(Crypto.HashType.SHA256, buffer)
+	
+	var ctx: HashingContext = HashingContext.new()
+	ctx.start(HashingContext.HASH_MD5)
+	ctx.update(buffer)
+	var digest: PackedByteArray = ctx.finish()
 	var hash_string: String = Marshalls.raw_to_base64(digest)
 
 	return {

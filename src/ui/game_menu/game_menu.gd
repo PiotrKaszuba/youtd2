@@ -25,8 +25,8 @@ func _ready():
 	_settings_menu.set_opened_in_game(true)
 	GameStateSerializer.ensure_default_save_dir()
 	var save_dir: String = GameStateSerializer.get_default_save_dir()
-	var extension: String = GameStateSerializer.get_default_extension()
-	var filter: String = "*%s ; YouTD2 Save" % extension
+	var extension: String = GameStateSerializer.get_scene_extension()
+	var filter: String = "*%s ; YouTD2 Scene" % extension
 	_save_dialog.filters = PackedStringArray([filter])
 	_load_dialog.filters = PackedStringArray([filter])
 	_save_dialog.access = FileDialog.ACCESS_USERDATA
