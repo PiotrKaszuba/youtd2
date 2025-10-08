@@ -2,6 +2,8 @@ extends Node
 #class_name GameStateSerializer
 
 
+const AutoloadStateSerializer = preload("res://src/game_state/autoload_state_serializer.gd")
+
 const CURRENT_FORMAT_VERSION: int = 1
 const DEFAULT_SAVE_DIR: String = "user://saves"
 const SAVE_SCENE_EXTENSION = ".tscn"
@@ -9,6 +11,7 @@ const SAVE_META_EXTENSION = ".meta"
 
 
 var _last_save_error: int = OK
+var _pending_autoload_state: Dictionary = {}
 
 
 func get_default_save_dir() -> String:
@@ -18,7 +21,7 @@ func get_scene_extension() -> String:
 	return SAVE_SCENE_EXTENSION
 
 func get_meta_extension() -> String:
-	return SAVE_SCENE_EXTENSION
+	return SAVE_META_EXTENSION
 
 func get_last_save_error() -> int:
 	return _last_save_error
@@ -50,6 +53,7 @@ func save_game_scene(game_scene: Node, path: String, metadata: Dictionary = {}) 
 		"format_version": CURRENT_FORMAT_VERSION,
 		"hash_tree": hash_tree,
 		"metadata": metadata,
+		"autoload_state": AutoloadStateSerializer.capture_state(game_scene),
 	}
 
 	var save_err: int = ResourceSaver.save(packed_scene, normalized_scene_path)
@@ -92,12 +96,19 @@ func load_game_scene(path: String) -> int:
 	if meta_dict.get("hash_tree") == null:
 		return ERR_INVALID_DATA
 
+	_pending_autoload_state = meta_dict.get("autoload_state", {}).duplicate(true)
 	GameStateVerifier.schedule_expected_hash_tree(meta_dict.get("hash_tree", {}), normalized_scene_path)
 
 	var tree: SceneTree = get_tree()
 	tree.paused = false
 	var change_err: int = tree.change_scene_to_packed(packed_scene)
 	return change_err
+
+
+func consume_pending_autoload_state() -> Dictionary:
+	var state: Dictionary = _pending_autoload_state.duplicate(true)
+	_pending_autoload_state = {}
+	return state
 
 
 func _normalize_path(path: String, extension: String) -> String:

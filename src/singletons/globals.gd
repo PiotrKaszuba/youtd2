@@ -52,6 +52,58 @@ func reset():
 	pass
 
 
+func get_serialized_state(scene: Node) -> Dictionary:
+	var state: Dictionary = {}
+	state["player_mode"] = _player_mode
+	state["wave_count"] = _wave_count
+	state["game_mode"] = _game_mode
+	state["difficulty"] = _difficulty
+	state["team_mode"] = _team_mode
+	state["origin_seed"] = _origin_seed
+	state["update_ticks_per_physics_tick"] = _update_ticks_per_physics_tick
+	state["connection_type"] = _connection_type
+	state["enet_peer_id_to_player_name"] = _enet_peer_id_to_player_name.duplicate(true)
+	state["title_screen_notifications"] = _title_screen_notification_list.duplicate()
+	state["synced_rng_seed"] = synced_rng.seed
+	state["synced_rng_state"] = synced_rng.state
+	state["local_rng_seed"] = local_rng.seed
+	state["local_rng_state"] = local_rng.state
+	var map_path: String = ""
+	if scene != null && _map != null && is_instance_valid(_map):
+		if scene.is_inside_tree() && _map.is_inside_tree():
+			var relative_path: NodePath = scene.get_path_to(_map)
+			map_path = String(relative_path)
+	state["map_path"] = map_path
+	return state
+
+
+func apply_serialized_state(scene: Node, state: Dictionary):
+	_player_mode = state.get("player_mode", _player_mode)
+	_wave_count = state.get("wave_count", _wave_count)
+	_game_mode = state.get("game_mode", _game_mode)
+	_difficulty = state.get("difficulty", _difficulty)
+	_team_mode = state.get("team_mode", _team_mode)
+	_origin_seed = state.get("origin_seed", _origin_seed)
+	_update_ticks_per_physics_tick = state.get("update_ticks_per_physics_tick", _update_ticks_per_physics_tick)
+	_connection_type = state.get("connection_type", _connection_type)
+	var peer_name_map: Dictionary = state.get("enet_peer_id_to_player_name", {})
+	_enet_peer_id_to_player_name = peer_name_map.duplicate(true)
+	var notifications: Array = state.get("title_screen_notifications", [])
+	_title_screen_notification_list = notifications.duplicate()
+	var synced_seed: int = state.get("synced_rng_seed", synced_rng.seed)
+	synced_rng.seed = synced_seed
+	var synced_state: int = state.get("synced_rng_state", synced_rng.state)
+	synced_rng.state = synced_state
+	var local_seed: int = state.get("local_rng_seed", local_rng.seed)
+	local_rng.seed = local_seed
+	var local_state: int = state.get("local_rng_state", local_rng.state)
+	local_rng.state = local_state
+	var map_path: String = state.get("map_path", "")
+	if scene != null && !map_path.is_empty():
+		var map_node: Node = scene.get_node_or_null(NodePath(map_path))
+		if map_node != null:
+			_map = map_node
+
 func get_player_mode() -> PlayerMode.enm:
 	return _player_mode
 

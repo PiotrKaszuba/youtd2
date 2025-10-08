@@ -1,3 +1,5 @@
+const AutoloadStateSerializer = preload("res://src/game_state/autoload_state_serializer.gd")
+
 class_name GameScene extends Node
 
 
@@ -36,6 +38,11 @@ var _map: Map = null
 
 func _ready():
 	print_verbose("GameScene has loaded.")
+	var autoload_state: Dictionary = GameStateSerializer.consume_pending_autoload_state()
+	if !autoload_state.is_empty():
+		AutoloadStateSerializer.restore_state(self, autoload_state)
+		GameStateVerifier.verify_scene(self)
+		return
 	
 	Globals.reset()
 	PlayerManager.reset()

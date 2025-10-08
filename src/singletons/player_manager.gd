@@ -73,6 +73,53 @@ func reset():
 	_player_list = []
 
 
+func get_serialized_state() -> Dictionary:
+	var state: Dictionary = {}
+	var players: Array = []
+	for child in get_children():
+		var player: Player = child as Player
+		if player == null:
+			continue
+		var entry: Dictionary = {}
+		entry["id"] = player.get_id()
+		entry["peer_id"] = player.get_peer_id()
+		entry["user_id"] = player.get_user_id()
+		players.append(entry)
+	state["players"] = players
+	return state
+
+
+func apply_serialized_state(state: Dictionary):
+	reset()
+	var entries: Array = state.get("players", [])
+	var existing: Dictionary = {}
+	for child in get_children():
+		var player: Player = child as Player
+		if player == null:
+			continue
+		existing[player.get_id()] = player
+	for entry in entries:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var id: int = entry.get("id", -1)
+		if !existing.has(id):
+			continue
+		var player: Player = existing[id]
+		var peer_id: int = entry.get("peer_id", -1)
+		var user_id: String = entry.get("user_id", "")
+		_id_to_player_map[id] = player
+		if peer_id != -1:
+			_enet_peer_id_to_player_map[peer_id] = player
+		player.set("_peer_id", peer_id)
+		if !user_id.is_empty():
+			_nakama_user_id_to_player_map[user_id] = player
+		player.set("_user_id", user_id)
+		_player_list.append(player)
+	_player_list.sort_custom(
+		func(a, b) -> bool:
+			return a.get_id() < b.get_id()
+	)
+
 func add_player(player: Player):
 	var id: int = player.get_id()
 	_id_to_player_map[id] = player
