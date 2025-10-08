@@ -85,6 +85,8 @@ TutorialProperties="*res://src/singletons/properties/tutorial_properties.gd"
 ButtonSounds="*res://src/singletons/button_sounds.gd"
 SfxPaths="*res://src/singletons/sfx_paths.gd"
 Secrets="*res://src/singletons/secrets.gd"
+GameStateSerializer="*res://src/singletons/game_state_serializer.gd"
+GameStateVerifier="*res://src/singletons/game_state_verifier.gd"
 Nakama="*res://addons/com.heroiclabs.nakama/Nakama.gd"
 NakamaConnection="*res://src/singletons/nakama_connection.gd"
 OnlineMatch="*res://addons/nakama-webrtc/OnlineMatch.gd"
@@ -113,6 +115,10 @@ window/size/viewport_height=1440
 window/size/mode=3
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[network]
+
+checksum/use_game_state_hash_tree=false
 
 [gui]
 

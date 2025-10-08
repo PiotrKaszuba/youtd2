@@ -236,6 +236,14 @@ func _do_tick():
 
 
 func _calculate_game_state_checksum():
+	var use_tree: bool = ProjectSettings.get_setting("network/checksum/use_game_state_hash_tree", false)
+	if use_tree:
+		var scene: Node = get_tree().current_scene
+		if scene != null:
+			var digest: PackedByteArray = GameStateVerifier.compute_scene_digest(scene)
+			if !digest.is_empty():
+				return digest
+
 	var ctx: HashingContext = HashingContext.new()
 	ctx.start(HashingContext.HASH_MD5)
 

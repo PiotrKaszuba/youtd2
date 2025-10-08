@@ -168,6 +168,8 @@ func _ready():
 	if Config.run_test_item_drop_chances():
 		TestItemDropChances.run()
 
+	GameStateVerifier.verify_scene(self)
+
 
 func _unhandled_input(event: InputEvent):
 	var enter_pressed: bool = event.is_action_released("ui_text_newline")
@@ -574,6 +576,18 @@ func _cleanup_all_objects():
 #########################
 ###     Callbacks     ###
 #########################
+
+func _on_game_menu_save_requested(path: String):
+	var err: int = GameStateSerializer.save_game_scene(self, path)
+	if err != OK:
+		push_error("Failed to save game: %s" % err)
+	else:
+		print_verbose("Saved game to %s" % path)
+
+func _on_game_menu_load_requested(path: String):
+	var err: int = GameStateSerializer.load_game_scene(path)
+	if err != OK:
+		push_error("Failed to load game: %s" % err)
 
 func _on_game_menu_continue_pressed():
 	_toggle_game_menu()

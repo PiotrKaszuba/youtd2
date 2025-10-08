@@ -508,6 +508,8 @@ layout_mode = 2
 [connection signal="received_first_timeslot" from="Gameplay/GameClient" to="." method="_on_game_client_received_first_timeslot"]
 [connection signal="tutorial_triggered" from="Gameplay/TutorialController" to="." method="_on_tutorial_controller_tutorial_triggered"]
 [connection signal="finished" from="UI/BuilderMenu" to="." method="_on_builder_menu_finished"]
+[connection signal="save_requested" from="UI/GameMenu" to="." method="_on_game_menu_save_requested"]
+[connection signal="load_requested" from="UI/GameMenu" to="." method="_on_game_menu_load_requested"]
 [connection signal="continue_pressed" from="UI/GameMenu" to="." method="_on_game_menu_continue_pressed"]
 [connection signal="quit_pressed" from="UI/GameMenu" to="." method="_on_game_menu_quit_pressed"]
 [connection signal="hidden" from="UI/VBoxContainer/TutorialMenu" to="." method="_on_tutorial_menu_hidden"]
