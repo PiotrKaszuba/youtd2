@@ -4,11 +4,15 @@
 [ext_resource type="Script" path="res://src/ui/title_screen/configure_singleplayer_menu.gd" id="1_dgq16"]
 [ext_resource type="PackedScene" uid="uid://dc67simk1xfp4" path="res://src/ui/title_screen/match_config_panel.tscn" id="2_7m6il"]
 
-[node name="ConfigureSingleplayerMenu" type="PanelContainer" node_paths=PackedStringArray("_match_config_panel")]
+[node name="ConfigureSingleplayerMenu" type="PanelContainer" node_paths=PackedStringArray("_match_config_panel", "_replay_summary_label", "_replay_select_button", "_replay_clear_button", "_replay_file_dialog")]
 theme = ExtResource("1_70pqg")
 theme_type_variation = &"MainPanelContainer"
 script = ExtResource("1_dgq16")
 _match_config_panel = NodePath("VBoxContainer/MatchConfigPanel")
+_replay_summary_label = NodePath("VBoxContainer/ReplaySection/ReplaySummary")
+_replay_select_button = NodePath("VBoxContainer/ReplaySection/ReplayButtons/ReplaySelectButton")
+_replay_clear_button = NodePath("VBoxContainer/ReplaySection/ReplayButtons/ReplayClearButton")
+_replay_file_dialog = NodePath("ReplayFileDialog")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 2
@@ -17,6 +21,30 @@ layout_mode = 2
 layout_mode = 2
 theme_type_variation = &"LabelLarge"
 text = "SINGLE_CHOOSE_GAME_SETTINGS"
+
+[node name="ReplaySection" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="ReplaySummary" type="Label" parent="VBoxContainer/ReplaySection"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+autowrap_mode = 2
+text = "No replay selected."
+
+[node name="ReplayButtons" type="HBoxContainer" parent="VBoxContainer/ReplaySection"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ReplaySelectButton" type="Button" parent="VBoxContainer/ReplaySection/ReplayButtons"]
+layout_mode = 2
+focus_mode = 0
+text = "Select Replay"
+
+[node name="ReplayClearButton" type="Button" parent="VBoxContainer/ReplaySection/ReplayButtons"]
+layout_mode = 2
+focus_mode = 0
+disabled = true
+text = "Clear Replay"
 
 [node name="MatchConfigPanel" parent="VBoxContainer" instance=ExtResource("2_7m6il")]
 layout_mode = 2
@@ -39,5 +67,14 @@ layout_mode = 2
 focus_mode = 0
 text = "START_BUTTON"
 
+[node name="ReplayFileDialog" type="FileDialog" parent="."]
+access = 2
+file_mode = 0
+filters = PackedStringArray("*.jsonl ; Replay Files")
+title = "Select Replay"
+
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/CancelButton" to="." method="_on_cancel_button_pressed"]
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/StartButton" to="." method="_on_start_button_pressed"]
+[connection signal="pressed" from="VBoxContainer/ReplaySection/ReplayButtons/ReplaySelectButton" to="." method="_on_replay_select_button_pressed"]
+[connection signal="pressed" from="VBoxContainer/ReplaySection/ReplayButtons/ReplayClearButton" to="." method="_on_replay_clear_button_pressed"]
+[connection signal="file_selected" from="ReplayFileDialog" to="." method="_on_replay_file_dialog_file_selected"]

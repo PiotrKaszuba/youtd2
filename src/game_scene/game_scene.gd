@@ -41,6 +41,21 @@ func _ready():
 	PlayerManager.reset()
 	GroupManager.reset()
 
+	var player_mode: PlayerMode.enm = Globals.get_player_mode()
+	var playback_prepared: bool = ReplayService.has_prepared_playback()
+
+	if player_mode == PlayerMode.enm.SINGLEPLAYER:
+		if playback_prepared:
+			var playback_meta: Dictionary = ReplayService.get_prepared_replay_meta()
+			var replay_id: String = playback_meta.get("replay_id", "replay")
+			ReplayService.make_password_backup(replay_id)
+			ReplayService.apply_replay_settings(playback_meta)
+			ReplayService.begin_playback()
+			ReplayService.clear_prepared_replay()
+		else:
+			var recording_meta: Dictionary = _build_replay_recording_meta()
+			ReplayService.prepare_recording(recording_meta)
+
 #	Replace small map with big map if playing in multiplayer
 #	NOTE: need to swap instead of using big map for both
 #	cases because big map makes the framerate worse,
@@ -250,6 +265,22 @@ func get_build_space() -> BuildSpace:
 #########################
 ###      Private      ###
 #########################
+
+func _build_replay_recording_meta() -> Dictionary:
+	var meta: Dictionary = {}
+	meta["created_at"] = Time.get_datetime_string_from_system(false)
+	meta["player_mode"] = int(Globals.get_player_mode())
+	meta["game_mode"] = GameMode.convert_to_string(Globals.get_game_mode())
+	meta["difficulty"] = Difficulty.convert_to_string(Globals.get_difficulty())
+	meta["team_mode"] = TeamMode.convert_to_string(Globals.get_team_mode())
+	meta["wave_count"] = Globals.get_wave_count()
+	meta["origin_seed"] = Globals.get_origin_seed()
+	meta["update_ticks_per_physics_tick"] = Config.update_ticks_per_physics_tick()
+	meta["exp_password"] = Settings.get_setting(Settings.EXP_PASSWORD)
+	meta["wisdom_upgrades"] = Settings.get_setting(Settings.WISDOM_UPGRADES_CACHED).duplicate(true)
+	meta["player_name"] = Settings.get_setting(Settings.PLAYER_NAME)
+
+	return meta
 
 # Disables/enables all input (except builder menu)
 func _set_ui_input_enabled(enabled: bool):
@@ -577,6 +608,24 @@ func _cleanup_all_objects():
 
 func _on_game_menu_continue_pressed():
 	_toggle_game_menu()
+
+
+func _on_game_menu_save_replay_pressed():
+	if !ReplayService.is_recording():
+		Messages.add_normal(null, "Replay save is only available during live gameplay.")
+		return
+
+	var current_tick: int = _game_client.get_current_tick()
+	var export_tick: int = max(0, current_tick - 1)
+	var export_path: String = ReplayService.export_to_disk(export_tick)
+
+	if export_path.is_empty():
+		Messages.add_normal(null, "Failed to save replay.")
+	else:
+		var absolute_path: String = ProjectSettings.globalize_path(export_path)
+		var message: String = "Replay saved to %s" % absolute_path
+		Messages.add_normal(null, message)
+		print(message)
 
 
 func _on_settings_changed():

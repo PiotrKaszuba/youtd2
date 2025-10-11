@@ -10,6 +10,7 @@ enum Tab {
 
 
 signal continue_pressed()
+signal save_replay_pressed()
 signal quit_pressed()
 
 
@@ -31,6 +32,10 @@ func _on_continue_button_pressed():
 
 func _on_help_button_pressed():
 	_tab_container.current_tab = Tab.HELP
+
+
+func _on_save_replay_button_pressed():
+	save_replay_pressed.emit()
 
 
 func _on_settings_button_pressed():
