@@ -128,3 +128,6 @@ func enable_dev_commands() -> bool:
 
 func print_wave_info() -> bool:
 	return ProjectSettings.get_setting("application/config/print_wave_info") as bool
+
+func replay_chat_reports_enabled() -> bool:
+	return ProjectSettings.get_setting("application/config/replay_chat_reports") as bool

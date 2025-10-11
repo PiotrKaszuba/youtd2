@@ -103,18 +103,36 @@ func _on_credits_button_pressed():
 
 
 func _on_configure_singleplayer_menu_start_button_pressed():
-	var difficulty: Difficulty.enm = _configure_singleplayer_menu.get_difficulty()
-	var game_length: int = _configure_singleplayer_menu.get_game_length()
-	var game_mode: GameMode.enm = _configure_singleplayer_menu.get_game_mode()
+	var has_replay: bool = ReplayService.has_prepared_playback()
+	var difficulty: Difficulty.enm
+	var game_length: int
+	var game_mode: GameMode.enm
 	var team_mode: TeamMode.enm = TeamMode.enm.ONE_PLAYER_PER_TEAM
-	var origin_seed: int = randi()
+	var origin_seed: int
 
-	var difficulty_string: String = Difficulty.convert_to_string(difficulty)
-	var game_mode_string: String = GameMode.convert_to_string(game_mode)
-	Settings.set_setting(Settings.CACHED_GAME_DIFFICULTY, difficulty_string)
-	Settings.set_setting(Settings.CACHED_GAME_MODE, game_mode_string)
-	Settings.set_setting(Settings.CACHED_GAME_LENGTH, game_length)
-	Settings.flush()
+	if has_replay:
+		var meta: Dictionary = ReplayService.get_prepared_replay_meta()
+		var difficulty_string: String = meta.get("difficulty", "beginner")
+		var game_mode_string: String = meta.get("game_mode", "build")
+		var team_mode_string: String = meta.get("team_mode", "ffa")
+
+		difficulty = Difficulty.from_string(difficulty_string)
+		game_mode = GameMode.from_string(game_mode_string)
+		game_length = meta.get("wave_count", Constants.WAVE_COUNT_TRIAL)
+		team_mode = TeamMode.from_string(team_mode_string)
+		origin_seed = meta.get("origin_seed", 0)
+	else:
+		difficulty = _configure_singleplayer_menu.get_difficulty()
+		game_length = _configure_singleplayer_menu.get_game_length()
+		game_mode = _configure_singleplayer_menu.get_game_mode()
+		origin_seed = randi()
+
+		var difficulty_string: String = Difficulty.convert_to_string(difficulty)
+		var game_mode_string: String = GameMode.convert_to_string(game_mode)
+		Settings.set_setting(Settings.CACHED_GAME_DIFFICULTY, difficulty_string)
+		Settings.set_setting(Settings.CACHED_GAME_MODE, game_mode_string)
+		Settings.set_setting(Settings.CACHED_GAME_LENGTH, game_length)
+		Settings.flush()
 	
 	start_game(PlayerMode.enm.SINGLEPLAYER, game_length, game_mode, difficulty, team_mode, origin_seed, Globals.ConnectionType.ENET)
 

@@ -18,6 +18,8 @@ class_name GameClient extends Node
 
 signal received_first_timeslot()
 
+const ChecksumBuilder = preload("res://src/replay/checksum_builder.gd")
+
 
 # NOTE: this value determines how fast timeslot buffer
 # lowers when ping decreases. Higher value = faster
@@ -45,6 +47,7 @@ var _ping_history: Array = [0]
 var _received_any_timeslots: bool = false
 var _paused_by_host: bool = false
 var _last_received_timeslot_list: Array = []
+var _playback_was_active: bool = false
 
 
 @export var _game_host: GameHost
@@ -72,6 +75,7 @@ func _ready():
 
 	_turn_length = Utils.get_turn_length()
 	_timeslot_buffer_size = _turn_length
+	_playback_was_active = ReplayService.is_playback_active()
 
 
 # NOTE: using _physics_process() because it provides a
@@ -94,8 +98,15 @@ func set_paused_by_host(value: bool):
 	_paused_by_host = value
 
 
+func get_current_tick() -> int:
+	return _current_tick
+
+
 # Send action from client to host
 func add_action(action: Action):
+	if ReplayService.should_block_actions():
+		return
+
 	var serialized_action: Dictionary = action.serialize()
 	_game_host.receive_action.rpc_id(1, serialized_action)
 
@@ -228,11 +239,33 @@ func _do_tick():
 
 		var time_to_send_checksum: bool = _current_tick % CHECKSUM_PERIOD_TICKS == 0
 		if time_to_send_checksum:
+			var should_build_tree: bool = ReplayService.is_recording() || ReplayService.is_playback_active()
+			var checkpoint_tree: Dictionary = {}
+			if should_build_tree:
+				checkpoint_tree = ChecksumBuilder.build(_current_tick)
+
+				if ReplayService.is_recording():
+					ReplayService.record_checkpoint(_current_tick, checkpoint_tree)
+
+				var saved_state_path: String = ReplayService.get_state_path_for_tick(_current_tick)
+				if !saved_state_path.is_empty():
+					var expected_tree: Dictionary = _load_checkpoint_tree(saved_state_path)
+					if !expected_tree.is_empty():
+						var differences: Array = ChecksumBuilder.diff(expected_tree, checkpoint_tree)
+						_report_replay_differences(_current_tick, differences)
+
 			var checksum: PackedByteArray = _calculate_game_state_checksum()
 			_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
 
 	_update_state()
 	_current_tick += 1
+
+	var playback_active: bool = ReplayService.is_playback_active()
+	if _playback_was_active && !playback_active:
+		ReplayService.finish_playback_and_restore()
+		Messages.add_normal(null, "Replay finished. Control restored.")
+
+	_playback_was_active = playback_active
 
 
 func _calculate_game_state_checksum():
@@ -263,6 +296,73 @@ func _calculate_game_state_checksum():
 	var checksum: PackedByteArray = ctx.finish()
 
 	return checksum
+
+
+func _load_checkpoint_tree(path: String) -> Dictionary:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_warning("Failed to open replay checkpoint: %s" % path)
+		return {}
+
+	var content: String = file.get_as_text()
+	file.close()
+
+	var parsed: Variant = JSON.parse_string(content)
+	if typeof(parsed) == TYPE_DICTIONARY:
+		return parsed
+
+	push_warning("Replay checkpoint is malformed: %s" % path)
+	return {}
+
+
+func _report_replay_differences(tick: int, differences: Array):
+	if differences.is_empty():
+		return
+
+	var max_chat_reports: int = 3
+	var report_index: int = 0
+
+	for diff in differences:
+		var path_array: Array = diff.get("path", [])
+		var path_str: String = _format_diff_path(path_array)
+		var expected_hash: String = diff.get("expected_hash", "")
+		var actual_hash: String = diff.get("actual_hash", "")
+
+		var message: String = "Replay verification mismatch at tick %d -> %s" % [tick, path_str]
+		push_warning("%s (expected=%s actual=%s)" % [message, expected_hash, actual_hash])
+
+		var payload: Dictionary = {
+			"path": path_array,
+			"expected_hash": expected_hash,
+			"actual_hash": actual_hash,
+			"expected_data": diff.get("expected_data", {}),
+			"actual_data": diff.get("actual_data", {}),
+		}
+
+		print(JSON.stringify(payload, "    "))
+
+		if ReplayService.chat_reports_enabled() && report_index < max_chat_reports:
+			var chat_message: String = "%s (expected=%s actual=%s)" % [message, expected_hash, actual_hash]
+			Messages.add_normal(null, chat_message)
+
+		report_index += 1
+
+
+func _format_diff_path(path_segments: Array) -> String:
+	var segment_text_list: Array[String] = []
+
+	for segment in path_segments:
+		segment_text_list.append(str(segment))
+
+	var result: String = ""
+	for i in range(segment_text_list.size()):
+		var segment_text: String = segment_text_list[i]
+		if i == 0:
+			result = segment_text
+		else:
+			result += "/%s" % segment_text
+
+	return result
 
 
 # NOTE: need to implement this with a match statement

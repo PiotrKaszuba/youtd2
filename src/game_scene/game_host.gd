@@ -222,8 +222,18 @@ func _update_state_running():
 
 
 func _save_timeslot():
-	var timeslot: Array = _in_progress_timeslot.duplicate()
-	_in_progress_timeslot.clear()
+	var playback_active: bool = ReplayService.is_playback_active()
+	var timeslot: Array
+
+	if playback_active:
+		timeslot = ReplayService.get_timeslot_for_tick(_current_tick)
+		_in_progress_timeslot.clear()
+	else:
+		timeslot = _in_progress_timeslot.duplicate()
+		_in_progress_timeslot.clear()
+
+		if ReplayService.is_recording():
+			ReplayService.record_timeslot(_current_tick, timeslot)
 
 	var player_list: Array[Player] = PlayerManager.get_player_list()
 
