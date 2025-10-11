@@ -53,6 +53,7 @@ var _last_received_timeslot_list: Array = []
 @export var _build_space: BuildSpace
 @export var _chat_commands: ChatCommands
 @export var _select_unit: SelectUnit
+@export var _replay_manager: ReplayManager
 
 
 #########################
@@ -277,10 +278,16 @@ func _execute_action(action: Dictionary):
 
 	if player == null:
 		push_error("player is null")
-		
+
 		return
 
 	var action_type: Action.Type = action[Action.Field.TYPE]
+
+	# Log action for replay if in recording mode and action is replayable
+	if _replay_manager and _replay_manager.is_recording():
+		var action_obj: Action = Action.new(action)
+		if action_obj.is_replayable():
+			_replay_manager._record_action(action)
 
 	match action_type:
 		Action.Type.IDLE: return
