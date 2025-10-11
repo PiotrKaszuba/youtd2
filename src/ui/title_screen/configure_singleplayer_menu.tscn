@@ -4,11 +4,14 @@
 [ext_resource type="Script" path="res://src/ui/title_screen/configure_singleplayer_menu.gd" id="1_dgq16"]
 [ext_resource type="PackedScene" uid="uid://dc67simk1xfp4" path="res://src/ui/title_screen/match_config_panel.tscn" id="2_7m6il"]
 
-[node name="ConfigureSingleplayerMenu" type="PanelContainer" node_paths=PackedStringArray("_match_config_panel")]
+[node name="ConfigureSingleplayerMenu" type="PanelContainer" node_paths=PackedStringArray("_match_config_panel", "_load_replay_button", "_replay_file_label", "_clear_replay_button")]
 theme = ExtResource("1_70pqg")
 theme_type_variation = &"MainPanelContainer"
 script = ExtResource("1_dgq16")
 _match_config_panel = NodePath("VBoxContainer/MatchConfigPanel")
+_load_replay_button = NodePath("VBoxContainer/ReplaySection/LoadReplayButton")
+_replay_file_label = NodePath("VBoxContainer/ReplaySection/ReplayFileLabel")
+_clear_replay_button = NodePath("VBoxContainer/ReplaySection/ClearReplayButton")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 2
@@ -17,6 +20,26 @@ layout_mode = 2
 layout_mode = 2
 theme_type_variation = &"LabelLarge"
 text = "SINGLE_CHOOSE_GAME_SETTINGS"
+
+[node name="ReplaySection" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="LoadReplayButton" type="Button" parent="VBoxContainer/ReplaySection"]
+layout_mode = 2
+focus_mode = 0
+text = "Load Replay"
+
+[node name="ReplayFileLabel" type="Label" parent="VBoxContainer/ReplaySection"]
+layout_mode = 2
+text = "No replay loaded"
+
+[node name="ClearReplayButton" type="Button" parent="VBoxContainer/ReplaySection"]
+layout_mode = 2
+focus_mode = 0
+text = "Clear Replay"
+
+[node name="HSeparator" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
 
 [node name="MatchConfigPanel" parent="VBoxContainer" instance=ExtResource("2_7m6il")]
 layout_mode = 2
@@ -39,5 +62,7 @@ layout_mode = 2
 focus_mode = 0
 text = "START_BUTTON"
 
+[connection signal="pressed" from="VBoxContainer/ReplaySection/LoadReplayButton" to="." method="_on_load_replay_button_pressed"]
+[connection signal="pressed" from="VBoxContainer/ReplaySection/ClearReplayButton" to="." method="_on_clear_replay_button_pressed"]
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/CancelButton" to="." method="_on_cancel_button_pressed"]
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/StartButton" to="." method="_on_start_button_pressed"]

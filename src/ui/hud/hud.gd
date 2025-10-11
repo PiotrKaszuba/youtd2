@@ -23,6 +23,7 @@ class_name HUD extends Control
 @export var _multiplayer_pause_indicator: Control
 @export var _mission_tracker_container: MissionTrackerContainer
 @export var _one_time_help_popup: OneTimeHelpPopup
+@export var _replay_controls: Control
 
 # NOTE: this list is ordered by priority of closure. If
 # multiple windows are open, then the first window in the
@@ -49,6 +50,11 @@ func _ready():
 #########################
 ###       Public      ###
 #########################
+
+func set_replay_player(player: ReplayPlayer):
+	if _replay_controls != null:
+		_replay_controls.set_replay_player(player)
+
 
 func set_multiplayer_pause_indicator_visible(value: bool):
 	_multiplayer_pause_indicator.visible = value

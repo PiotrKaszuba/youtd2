@@ -103,18 +103,50 @@ func _on_credits_button_pressed():
 
 
 func _on_configure_singleplayer_menu_start_button_pressed():
-	var difficulty: Difficulty.enm = _configure_singleplayer_menu.get_difficulty()
-	var game_length: int = _configure_singleplayer_menu.get_game_length()
-	var game_mode: GameMode.enm = _configure_singleplayer_menu.get_game_mode()
-	var team_mode: TeamMode.enm = TeamMode.enm.ONE_PLAYER_PER_TEAM
-	var origin_seed: int = randi()
+	# Check if loading a replay
+	var replay_path: String = _configure_singleplayer_menu.get_replay_path()
+	var replay_metadata: ReplayMetadata = _configure_singleplayer_menu.get_replay_metadata()
+	
+	var difficulty: Difficulty.enm
+	var game_length: int
+	var game_mode: GameMode.enm
+	var team_mode: TeamMode.enm
+	var origin_seed: int
+	
+	if replay_metadata != null:
+		# Load settings from replay metadata
+		difficulty = replay_metadata.difficulty
+		game_length = replay_metadata.wave_count
+		game_mode = replay_metadata.game_mode
+		team_mode = replay_metadata.team_mode
+		origin_seed = replay_metadata.origin_seed
+		
+		# Set replay path in Globals
+		Globals.set_replay_file_path(replay_path)
+		
+		# Backup current exp password before loading replay
+		var current_exp_password: String = Settings.get_setting(Settings.EXP_PASSWORD)
+		Settings.set_setting("before_replay_exp_password", current_exp_password)
+		
+		# Set exp password from replay
+		Settings.set_setting(Settings.EXP_PASSWORD, replay_metadata.exp_password)
+		Settings.flush()
+	else:
+		# Normal game start
+		difficulty = _configure_singleplayer_menu.get_difficulty()
+		game_length = _configure_singleplayer_menu.get_game_length()
+		game_mode = _configure_singleplayer_menu.get_game_mode()
+		team_mode = TeamMode.enm.ONE_PLAYER_PER_TEAM
+		origin_seed = randi()
+		
+		Globals.set_replay_file_path("")
 
-	var difficulty_string: String = Difficulty.convert_to_string(difficulty)
-	var game_mode_string: String = GameMode.convert_to_string(game_mode)
-	Settings.set_setting(Settings.CACHED_GAME_DIFFICULTY, difficulty_string)
-	Settings.set_setting(Settings.CACHED_GAME_MODE, game_mode_string)
-	Settings.set_setting(Settings.CACHED_GAME_LENGTH, game_length)
-	Settings.flush()
+		var difficulty_string: String = Difficulty.convert_to_string(difficulty)
+		var game_mode_string: String = GameMode.convert_to_string(game_mode)
+		Settings.set_setting(Settings.CACHED_GAME_DIFFICULTY, difficulty_string)
+		Settings.set_setting(Settings.CACHED_GAME_MODE, game_mode_string)
+		Settings.set_setting(Settings.CACHED_GAME_LENGTH, game_length)
+		Settings.flush()
 	
 	start_game(PlayerMode.enm.SINGLEPLAYER, game_length, game_mode, difficulty, team_mode, origin_seed, Globals.ConnectionType.ENET)
 

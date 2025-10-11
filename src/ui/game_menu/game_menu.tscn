@@ -8,11 +8,12 @@
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_6c4dp"]
 
-[node name="GameMenu" type="VBoxContainer" node_paths=PackedStringArray("_tab_container", "_settings_menu")]
+[node name="GameMenu" type="VBoxContainer" node_paths=PackedStringArray("_tab_container", "_settings_menu", "_save_replay_button")]
 theme = ExtResource("1_v8b77")
 script = ExtResource("1_8lyul")
 _tab_container = NodePath("TabContainer")
 _settings_menu = NodePath("TabContainer/SettingsMenu")
+_save_replay_button = NodePath("TabContainer/MainTab/VBoxContainer/SaveReplayButton")
 
 [node name="TabContainer" type="TabContainer" parent="."]
 layout_mode = 2
@@ -34,6 +35,11 @@ theme_override_constants/separation = 5
 layout_mode = 2
 focus_mode = 0
 text = "CONTINUE_BUTTON"
+
+[node name="SaveReplayButton" type="Button" parent="TabContainer/MainTab/VBoxContainer"]
+layout_mode = 2
+focus_mode = 0
+text = "Save Replay"
 
 [node name="HelpButton" type="Button" parent="TabContainer/MainTab/VBoxContainer"]
 layout_mode = 2
@@ -72,6 +78,7 @@ metadata/_tab_index = 3
 
 [connection signal="hidden" from="." to="." method="_on_hidden"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/ContinueButton" to="." method="_on_continue_button_pressed"]
+[connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/SaveReplayButton" to="." method="_on_save_replay_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/HelpButton" to="." method="_on_help_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/EncyclopediaButton" to="." method="_on_encyclopedia_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/SettingsButton" to="." method="_on_settings_button_pressed"]

@@ -24,6 +24,11 @@ var _enet_peer_id_to_player_name: Dictionary = {}
 var _title_screen_notification_list: Array[String] = []
 var _map: Map = null
 
+# Replay system state
+var _replay_file_path: String = ""
+var _is_replaying: bool = false
+var _replay_recorder: ReplayRecorder = null
+
 
 # NOTE: you must use random functions via one of the
 # RandomNumberGenerator instances below. This is to prevent
@@ -120,4 +125,28 @@ func get_title_screen_notification_list() -> Array[String]:
 
 func clear_title_screen_notification_list():
 	_title_screen_notification_list.clear()
+
+
+func set_replay_file_path(path: String):
+	_replay_file_path = path
+
+
+func get_replay_file_path() -> String:
+	return _replay_file_path
+
+
+func set_is_replaying(value: bool):
+	_is_replaying = value
+
+
+func is_replaying() -> bool:
+	return _is_replaying
+
+
+func set_replay_recorder(recorder: ReplayRecorder):
+	_replay_recorder = recorder
+
+
+func get_replay_recorder() -> ReplayRecorder:
+	return _replay_recorder
 
