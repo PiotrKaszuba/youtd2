@@ -40,6 +40,15 @@ layout_mode = 2
 focus_mode = 0
 text = "HELP_BUTTON"
 
+[node name="SaveReplayButton" type="Button" parent="TabContainer/MainTab/VBoxContainer"]
+layout_mode = 2
+focus_mode = 0
+text = "SAVE_REPLAY_FROM_START_BUTTON"
+
+[node name="SpacerSmall" type="Control" parent="TabContainer/MainTab/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 4)
+
 [node name="EncyclopediaButton" type="Button" parent="TabContainer/MainTab/VBoxContainer"]
 layout_mode = 2
 focus_mode = 0
@@ -73,6 +82,7 @@ metadata/_tab_index = 3
 [connection signal="hidden" from="." to="." method="_on_hidden"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/ContinueButton" to="." method="_on_continue_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/HelpButton" to="." method="_on_help_button_pressed"]
+[connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/SaveReplayButton" to="." method="_on_save_replay_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/EncyclopediaButton" to="." method="_on_encyclopedia_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/SettingsButton" to="." method="_on_settings_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/QuitButton" to="." method="_on_quit_button_pressed"]

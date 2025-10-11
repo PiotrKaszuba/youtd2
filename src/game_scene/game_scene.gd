@@ -66,6 +66,8 @@ func _ready():
 	Globals.set_update_ticks_per_physics_tick(default_update_ticks_per_physics_tick)
 
 	_hud.set_game_start_timer(_game_start_timer)
+
+	# If TitleScreen passed a replay file path via Globals (future), this would be the hook to attach ReplayPlayer.
 	
 	EventBus.player_requested_help.connect(_on_player_requested_help)
 	EventBus.player_requested_quit_to_title.connect(_on_player_requested_quit_to_title)

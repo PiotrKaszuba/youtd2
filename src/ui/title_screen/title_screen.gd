@@ -72,6 +72,9 @@ func start_game(player_mode: PlayerMode.enm, wave_count: int, game_mode: GameMod
 	Globals._team_mode = team_mode
 	Globals._origin_seed = origin_seed
 	Globals._connection_type = connection_type
+
+	# Optional: store replay path in Globals title notifications to be picked in GameScene later (simple handoff)
+	# For v1, we just seed RNG from origin_seed and let ReplayPlayer be attached later when needed.
 	
 #	NOTE: need to add a delay so that the game properly
 #	switches to displaying LOADING tab before starting
@@ -103,10 +106,27 @@ func _on_credits_button_pressed():
 
 
 func _on_configure_singleplayer_menu_start_button_pressed():
+	var team_mode: TeamMode.enm = TeamMode.enm.ONE_PLAYER_PER_TEAM
+	# If a replay is selected, start with its settings; otherwise use UI
+	var cfg_menu := _configure_singleplayer_menu
+	if cfg_menu != null && cfg_menu.has_method("_loaded_replay_path") and cfg_menu._loaded_replay_path != "":
+		var f := FileAccess.open(cfg_menu._loaded_replay_path, FileAccess.READ)
+		if f != null:
+			var meta_line := f.get_line()
+			f.close()
+			var meta: Dictionary = JSON.parse_string(meta_line)
+			if typeof(meta) == TYPE_DICTIONARY:
+				var settings: Dictionary = meta.get("settings", {})
+				var game_mode: GameMode.enm = settings.get("game_mode", GameMode.enm.BUILD)
+				var difficulty: Difficulty.enm = settings.get("difficulty", Difficulty.enm.EASY)
+				var game_length: int = settings.get("wave_count", Constants.WAVE_COUNT_TRIAL)
+				var origin_seed: int = meta.get("seed", 0)
+				start_game(PlayerMode.enm.SINGLEPLAYER, game_length, game_mode, difficulty, team_mode, origin_seed, Globals.ConnectionType.ENET)
+				return
+
 	var difficulty: Difficulty.enm = _configure_singleplayer_menu.get_difficulty()
 	var game_length: int = _configure_singleplayer_menu.get_game_length()
 	var game_mode: GameMode.enm = _configure_singleplayer_menu.get_game_mode()
-	var team_mode: TeamMode.enm = TeamMode.enm.ONE_PLAYER_PER_TEAM
 	var origin_seed: int = randi()
 
 	var difficulty_string: String = Difficulty.convert_to_string(difficulty)
