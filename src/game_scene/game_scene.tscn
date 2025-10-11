@@ -17,6 +17,7 @@
 [ext_resource type="Script" path="res://src/game_scene/build_space.gd" id="16_p1jwo"]
 [ext_resource type="Script" path="res://src/game_scene/tutorial_controller.gd" id="17_5cvlj"]
 [ext_resource type="Script" path="res://src/game_scene/camera_controller.gd" id="17_imw8o"]
+[ext_resource type="Script" path="res://src/singletons/replay_manager.gd" id="28_replay"]
 [ext_resource type="PackedScene" uid="uid://bjvafnsglmpin" path="res://src/map/map_small.tscn" id="17_td8cv"]
 [ext_resource type="Script" path="res://src/creeps/wave_path.gd" id="18_m2fcq"]
 [ext_resource type="PackedScene" uid="uid://u567sx64fpwa" path="res://src/missions/mission_manager.tscn" id="18_ujbrx"]
@@ -138,7 +139,7 @@ shader_parameter/vignette_intensity = 0.299
 shader_parameter/vignette_opacity = 0.742
 shader_parameter/vignette_rgb = Color(0, 0, 0.129412, 1)
 
-[node name="GameScene" type="Node" node_paths=PackedStringArray("_game_menu", "_hud", "_map_small", "_camera", "_camera_controller", "_team_container", "_game_start_timer", "_select_point_for_cast", "_select_target_for_cast", "_move_item", "_select_unit", "_build_tower", "_mouse_state", "_game_client", "_game_time", "_pause_shadow_rect", "_shadow_below_builder_menu", "_shadow_above_builder_menu", "_object_container", "_build_space", "_tutorial_menu", "_tutorial_controller", "_builder_menu", "_range_checker")]
+[node name="GameScene" type="Node" node_paths=PackedStringArray("_game_menu", "_hud", "_map_small", "_camera", "_camera_controller", "_team_container", "_game_start_timer", "_select_point_for_cast", "_select_target_for_cast", "_move_item", "_select_unit", "_build_tower", "_mouse_state", "_game_client", "_game_time", "_pause_shadow_rect", "_shadow_below_builder_menu", "_shadow_above_builder_menu", "_object_container", "_build_space", "_tutorial_menu", "_tutorial_controller", "_builder_menu", "_range_checker", "_replay_manager")]
 process_mode = 3
 script = ExtResource("1_0wd1b")
 _game_menu = NodePath("UI/GameMenu")
@@ -216,13 +217,17 @@ script = ExtResource("12_8gb75")
 _game_client = NodePath("../GameClient")
 _hud = NodePath("../../UI/HUD")
 
-[node name="GameClient" parent="Gameplay" node_paths=PackedStringArray("_game_host", "_game_time", "_hud", "_build_space", "_chat_commands", "_select_unit") instance=ExtResource("15_a5l86")]
+[node name="GameClient" parent="Gameplay" node_paths=PackedStringArray("_game_host", "_game_time", "_hud", "_build_space", "_chat_commands", "_select_unit", "_replay_manager") instance=ExtResource("15_a5l86")]
 _game_host = NodePath("../GameHost")
 _game_time = NodePath("../GameTime")
 _hud = NodePath("../../UI/HUD")
 _build_space = NodePath("../BuildSpace")
 _chat_commands = NodePath("../ChatCommands")
 _select_unit = NodePath("../SelectUnit")
+_replay_manager = NodePath("../ReplayManager")
+
+[node name="ReplayManager" type="Node" parent="Gameplay"]
+script = ExtResource("28_replay")
 
 [node name="ChatCommands" type="Node" parent="Gameplay" node_paths=PackedStringArray("_team_container", "_hud", "_game_client", "_range_checker")]
 script = ExtResource("16_amwbk")

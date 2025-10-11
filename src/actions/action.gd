@@ -77,3 +77,22 @@ func _init(data: Dictionary):
 
 func serialize() -> Dictionary:
 	return _data
+
+
+func is_replayable() -> bool:
+	"""Check if this action should be included in replays"""
+
+	# Exclude UI-only actions and other non-gameplay actions
+	var excluded_types: Array = [
+		Type.IDLE,
+		Type.SELECT_UNIT,
+		Type.CHAT,  # Chat commands might be included, but regular chat excluded
+	]
+
+	var action_type: Type = get_type()
+	return not (action_type in excluded_types)
+
+
+func get_type() -> Type:
+	"""Get the action type"""
+	return _data.get(Field.TYPE, Type.NONE)
