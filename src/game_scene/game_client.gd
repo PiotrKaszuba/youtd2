@@ -53,6 +53,7 @@ var _last_received_timeslot_list: Array = []
 @export var _build_space: BuildSpace
 @export var _chat_commands: ChatCommands
 @export var _select_unit: SelectUnit
+@export var _replay_logger: ReplayLogger
 
 
 #########################
@@ -225,6 +226,10 @@ func _do_tick():
 
 		for action in timeslot:
 			_execute_action(action)
+			
+			# Log action for replay (single-player only for now)
+			if Globals.get_player_mode() == PlayerMode.enm.SINGLEPLAYER && _replay_logger != null:
+				_replay_logger.log_action(action, _current_tick)
 
 		var time_to_send_checksum: bool = _current_tick % CHECKSUM_PERIOD_TICKS == 0
 		if time_to_send_checksum:

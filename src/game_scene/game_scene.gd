@@ -25,6 +25,7 @@ class_name GameScene extends Node
 @export var _tutorial_controller: TutorialController
 @export var _builder_menu: BuilderMenu
 @export var _range_checker: TowerPreview
+@export var _replay_logger: ReplayLogger
 
 var _ui_input_is_enabled: bool = false
 var _map: Map = null
@@ -40,6 +41,10 @@ func _ready():
 	Globals.reset()
 	PlayerManager.reset()
 	GroupManager.reset()
+	
+	# Start replay logging for single-player games
+	if Globals.get_player_mode() == PlayerMode.enm.SINGLEPLAYER && _replay_logger != null:
+		_replay_logger.start_logging()
 
 #	Replace small map with big map if playing in multiplayer
 #	NOTE: need to swap instead of using big map for both
@@ -877,6 +882,26 @@ func _on_player_requested_help():
 
 func _on_game_menu_quit_pressed():
 	_quit_to_title()
+
+
+func _on_game_menu_save_replay_pressed():
+	_save_current_replay()
+
+
+func _save_current_replay():
+	if _replay_logger == null:
+		push_error("ReplayLogger not found")
+		return
+	
+	if !_replay_logger.is_logging():
+		push_error("Replay logging not started")
+		return
+	
+	var success = _replay_logger.save_replay()
+	if success:
+		print("Replay saved successfully")
+	else:
+		push_error("Failed to save replay")
 
 
 func _on_player_requested_quit_to_title():

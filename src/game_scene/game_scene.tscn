@@ -27,6 +27,7 @@
 [ext_resource type="Shader" path="res://resources/shaders/saturation_burn.gdshader" id="23_go3nh"]
 [ext_resource type="Shader" path="res://resources/shaders/foggy_camera.gdshader" id="24_omg4c"]
 [ext_resource type="PackedScene" uid="uid://cngv1rgplre2c" path="res://src/ui/hud/hud.tscn" id="25_m068l"]
+[ext_resource type="Script" path="res://src/singletons/replay_logger.gd" id="25_replay_logger"]
 [ext_resource type="PackedScene" uid="uid://4dakdefm73rd" path="res://src/ui/hud/builder_menu.tscn" id="26_2bi2s"]
 [ext_resource type="PackedScene" uid="uid://hiex318b5cvk" path="res://src/ui/game_menu/game_menu.tscn" id="26_xukvx"]
 [ext_resource type="PackedScene" uid="uid://u1yl8rbswhtp" path="res://src/ui/hud/tutorial_menu.tscn" id="27_vroom"]
@@ -138,7 +139,7 @@ shader_parameter/vignette_intensity = 0.299
 shader_parameter/vignette_opacity = 0.742
 shader_parameter/vignette_rgb = Color(0, 0, 0.129412, 1)
 
-[node name="GameScene" type="Node" node_paths=PackedStringArray("_game_menu", "_hud", "_map_small", "_camera", "_camera_controller", "_team_container", "_game_start_timer", "_select_point_for_cast", "_select_target_for_cast", "_move_item", "_select_unit", "_build_tower", "_mouse_state", "_game_client", "_game_time", "_pause_shadow_rect", "_shadow_below_builder_menu", "_shadow_above_builder_menu", "_object_container", "_build_space", "_tutorial_menu", "_tutorial_controller", "_builder_menu", "_range_checker")]
+[node name="GameScene" type="Node" node_paths=PackedStringArray("_game_menu", "_hud", "_map_small", "_camera", "_camera_controller", "_team_container", "_game_start_timer", "_select_point_for_cast", "_select_target_for_cast", "_move_item", "_select_unit", "_build_tower", "_mouse_state", "_game_client", "_game_time", "_pause_shadow_rect", "_shadow_below_builder_menu", "_shadow_above_builder_menu", "_object_container", "_build_space", "_tutorial_menu", "_tutorial_controller", "_builder_menu", "_range_checker", "_replay_logger")]
 process_mode = 3
 script = ExtResource("1_0wd1b")
 _game_menu = NodePath("UI/GameMenu")
@@ -165,6 +166,7 @@ _tutorial_menu = NodePath("UI/VBoxContainer/TutorialMenu")
 _tutorial_controller = NodePath("Gameplay/TutorialController")
 _builder_menu = NodePath("UI/BuilderMenu")
 _range_checker = NodePath("World/RangeChecker")
+_replay_logger = NodePath("ReplayLogger")
 
 [node name="Gameplay" type="Node" parent="."]
 process_mode = 1
@@ -410,6 +412,9 @@ modulate = Color(1, 1, 1, 0.784314)
 z_index = 100
 _build_space = NodePath("../../Gameplay/BuildSpace")
 
+[node name="ReplayLogger" type="Node" parent="."]
+script = ExtResource("25_replay_logger")
+
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="DesaturationFilter" type="ColorRect" parent="UI"]
@@ -510,4 +515,5 @@ layout_mode = 2
 [connection signal="finished" from="UI/BuilderMenu" to="." method="_on_builder_menu_finished"]
 [connection signal="continue_pressed" from="UI/GameMenu" to="." method="_on_game_menu_continue_pressed"]
 [connection signal="quit_pressed" from="UI/GameMenu" to="." method="_on_game_menu_quit_pressed"]
+[connection signal="save_replay_pressed" from="UI/GameMenu" to="." method="_on_game_menu_save_replay_pressed"]
 [connection signal="hidden" from="UI/VBoxContainer/TutorialMenu" to="." method="_on_tutorial_menu_hidden"]
