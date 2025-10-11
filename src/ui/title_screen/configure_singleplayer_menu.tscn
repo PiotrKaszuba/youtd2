@@ -29,6 +29,11 @@ size_flags_vertical = 3
 layout_mode = 2
 alignment = 2
 
+[node name="LoadReplayButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+focus_mode = 0
+text = "LOAD_REPLAY_BUTTON"
+
 [node name="CancelButton" type="Button" parent="VBoxContainer/HBoxContainer"]
 layout_mode = 2
 focus_mode = 0
@@ -39,5 +44,6 @@ layout_mode = 2
 focus_mode = 0
 text = "START_BUTTON"
 
+[connection signal="pressed" from="VBoxContainer/HBoxContainer/LoadReplayButton" to="." method="_on_load_replay_button_pressed"]
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/CancelButton" to="." method="_on_cancel_button_pressed"]
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/StartButton" to="." method="_on_start_button_pressed"]

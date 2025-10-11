@@ -68,6 +68,7 @@ var _player_timeslot_send_queue: Dictionary = {}
 # host confirms that all players have connected successfully
 # and finished loading game scene.
 var _state: HostState = HostState.WAITING_FOR_LAGGING_PLAYERS
+var _replay_recorder: ReplayRecorder = null
 
 
 #########################
@@ -81,6 +82,16 @@ func _ready():
 	PlayerManager.players_created.connect(_on_players_created)
 	
 	_turn_length = Utils.get_turn_length()
+
+#	NOTE: initialize recorder only in singleplayer for now
+    var is_singleplayer: bool = Globals.get_player_mode() == PlayerMode.enm.SINGLEPLAYER
+    if is_singleplayer:
+        _replay_recorder = ReplayRecorder.new()
+        add_child(_replay_recorder)
+        var replay_id: String = str(Time.get_unix_time_from_system())
+        var seed: int = Globals.get_origin_seed()
+        var checksum_period: int = 300
+        _replay_recorder.setup(replay_id, seed, checksum_period)
 
 
 func _physics_process(_delta: float):
@@ -227,11 +238,14 @@ func _save_timeslot():
 
 	var player_list: Array[Player] = PlayerManager.get_player_list()
 
-	for player in player_list:
+    for player in player_list:
 		var player_id: int = player.get_id()
 		var timeslots_to_send: Dictionary = _player_timeslot_send_queue[player_id]
 
 		timeslots_to_send[_current_tick] = timeslot
+
+    if _replay_recorder != null && _replay_recorder.is_enabled():
+        _replay_recorder.record_timeslot(_current_tick, timeslot)
 
 
 # Returns highest ping of all players, in msec. Ping is

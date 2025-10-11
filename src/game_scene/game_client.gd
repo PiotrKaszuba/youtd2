@@ -45,6 +45,7 @@ var _ping_history: Array = [0]
 var _received_any_timeslots: bool = false
 var _paused_by_host: bool = false
 var _last_received_timeslot_list: Array = []
+var _replay_player: ReplayPlayer = null
 
 
 @export var _game_host: GameHost
@@ -81,6 +82,8 @@ func _physics_process(_delta: float):
 #	NOTE: depending on _should_tick() return value, client
 #	may tick 0, 1 or multiple times.
 	var ticks_during_this_process: int = 0
+	if _replay_player != null:
+		_replay_player.preload_timeslots_if_needed(_current_tick)
 	while _should_tick(ticks_during_this_process):
 		_do_tick()
 		ticks_during_this_process += 1
@@ -97,6 +100,9 @@ func set_paused_by_host(value: bool):
 # Send action from client to host
 func add_action(action: Action):
 	var serialized_action: Dictionary = action.serialize()
+	# Disable sending actions during replay playback
+	if _replay_player != null:
+		return
 	_game_host.receive_action.rpc_id(1, serialized_action)
 
 
@@ -127,6 +133,7 @@ func receive_timeslots(timeslot_list: Dictionary):
 		_timeslot_map[tick] = timeslot_list[tick]
 
 	_last_received_timeslot_list = timeslot_list.keys()
+	# If replay injection, received locally; no rpc ack needed
 
 
 @rpc("authority", "call_local", "reliable")
@@ -229,10 +236,30 @@ func _do_tick():
 		var time_to_send_checksum: bool = _current_tick % CHECKSUM_PERIOD_TICKS == 0
 		if time_to_send_checksum:
 			var checksum: PackedByteArray = _calculate_game_state_checksum()
-			_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
+			# If replaying, compare with expected root and warn if mismatch
+			if _replay_player != null:
+				var expected_hex: String = _replay_player.get_expected_root_for_tick(_current_tick)
+				if expected_hex != "":
+					var ctx: HashingContext = HashingContext.new()
+					ctx.start(HashingContext.HASH_SHA256)
+					ctx.update(checksum)
+					var hex: String = ""
+					for b in ctx.finish():
+						hex += "%02x" % int(b)
+					if hex != expected_hex:
+						print_debug("Replay checksum mismatch at tick %d: expected %s, got %s" % [_current_tick, expected_hex, hex])
+						var local_player: Player = PlayerManager.get_local_player()
+						Utils.add_ui_error(local_player, "Replay checksum mismatch at tick %d" % _current_tick)
+			else:
+				_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
 
 	_update_state()
 	_current_tick += 1
+
+	# When replay finishes, user regains control automatically
+	if _replay_player != null && _replay_player.is_finished():
+		_replay_player.queue_free()
+		_replay_player = null
 
 
 func _calculate_game_state_checksum():

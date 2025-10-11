@@ -61,6 +61,27 @@ func _on_quit_button_pressed():
 	quit_pressed.emit()
 
 
+func _on_save_replay_button_pressed():
+	# Only available in singleplayer; host owns recorder
+	var is_singleplayer: bool = Globals.get_player_mode() == PlayerMode.enm.SINGLEPLAYER
+	if !is_singleplayer:
+		Utils.add_ui_error(PlayerManager.get_local_player(), "Replay saving is singleplayer-only in v1")
+		return
+
+	var host: GameHost = get_tree().get_root().get_node_or_null("GameScene/Gameplay/GameHost")
+	if host == null:
+		push_error("GameHost not found; cannot save replay")
+		return
+
+	# Recorder writes continuously; ensure flush to disk now
+	if host.has_method("_replay_recorder"):
+		# Access via property; fallback is no-op if unavailable
+		var recorder = host._replay_recorder
+		if recorder != null && recorder.has_method("close"):
+			recorder.close()
+			Utils.add_ui_error(PlayerManager.get_local_player(), "Replay saved to user://replays/")
+
+
 func _on_encyclopedia_button_pressed() -> void:
 	_tab_container.current_tab = Tab.ENCYCLOPEDIA
 
