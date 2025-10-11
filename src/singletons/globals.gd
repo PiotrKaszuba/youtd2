@@ -23,6 +23,7 @@ var _connection_type: ConnectionType = ConnectionType.ENET
 var _enet_peer_id_to_player_name: Dictionary = {}
 var _title_screen_notification_list: Array[String] = []
 var _map: Map = null
+var _replay_file_path: String = ""
 
 
 # NOTE: you must use random functions via one of the
@@ -66,6 +67,10 @@ func get_game_mode() -> GameMode.enm:
 
 func get_difficulty() -> Difficulty.enm:
 	return _difficulty
+
+
+func get_replay_file_path() -> String:
+	return _replay_file_path
 
 
 func get_team_mode() -> TeamMode.enm:

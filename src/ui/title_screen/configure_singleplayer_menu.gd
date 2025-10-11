@@ -3,9 +3,14 @@ class_name ConfigureSinglePlayerMenu extends PanelContainer
 
 signal cancel_pressed()
 signal start_button_pressed()
+signal replay_loaded(replay_file_path: String)
 
 
 @export var _match_config_panel: MatchConfigPanel
+@export var _load_replay_button: Button
+@export var _replay_file_label: Label
+
+var _selected_replay_file: String = ""
 
 
 #########################
@@ -44,6 +49,14 @@ func get_game_mode() -> GameMode.enm:
 	return _match_config_panel.get_game_mode()
 
 
+func get_selected_replay_file() -> String:
+	return _selected_replay_file
+
+
+func is_replay_mode() -> bool:
+	return !_selected_replay_file.is_empty()
+
+
 #########################
 ###     Callbacks     ###
 #########################
@@ -54,3 +67,26 @@ func _on_start_button_pressed():
 
 func _on_cancel_button_pressed():
 	cancel_pressed.emit()
+
+
+func _on_load_replay_button_pressed():
+	var file_dialog = FileDialog.new()
+	file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	file_dialog.access = FileDialog.ACCESS_USERDATA
+	file_dialog.current_dir = "user://replays"
+	file_dialog.add_filter("*.jsonl", "Replay Files")
+	
+	file_dialog.file_selected.connect(_on_replay_file_selected)
+	
+	add_child(file_dialog)
+	file_dialog.popup_centered(Vector2i(800, 600))
+
+
+func _on_replay_file_selected(file_path: String):
+	_selected_replay_file = file_path
+	_replay_file_label.text = file_path.get_file()
+	
+	# Disable match config panel when replay is loaded
+	_match_config_panel.set_disabled(true)
+	
+	replay_loaded.emit(file_path)

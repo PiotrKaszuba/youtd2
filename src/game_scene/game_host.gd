@@ -50,6 +50,7 @@ const LAG_TIME_MSEC: float = 3000.0
 
 @export var _game_client: GameClient
 @export var _hud: HUD
+@export var _replay_logger: ReplayLogger
 
 
 var _current_tick: int = 0
@@ -123,6 +124,10 @@ func receive_action(action: Dictionary):
 	action[Action.Field.PLAYER_ID] = player_id
 
 	_in_progress_timeslot.append(action)
+	
+	# Log action for replay (single-player only for now)
+	if Globals.get_player_mode() == PlayerMode.enm.SINGLEPLAYER && _replay_logger != null:
+		_replay_logger.log_action(action, _current_tick)
 
 
 # TODO: handle disconnections here. If player is

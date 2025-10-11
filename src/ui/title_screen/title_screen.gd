@@ -103,6 +103,13 @@ func _on_credits_button_pressed():
 
 
 func _on_configure_singleplayer_menu_start_button_pressed():
+	if _configure_singleplayer_menu.is_replay_mode():
+		_start_replay_game()
+	else:
+		_start_normal_game()
+
+
+func _start_normal_game():
 	var difficulty: Difficulty.enm = _configure_singleplayer_menu.get_difficulty()
 	var game_length: int = _configure_singleplayer_menu.get_game_length()
 	var game_mode: GameMode.enm = _configure_singleplayer_menu.get_game_mode()
@@ -115,6 +122,22 @@ func _on_configure_singleplayer_menu_start_button_pressed():
 	Settings.set_setting(Settings.CACHED_GAME_MODE, game_mode_string)
 	Settings.set_setting(Settings.CACHED_GAME_LENGTH, game_length)
 	Settings.flush()
+	
+	start_game(PlayerMode.enm.SINGLEPLAYER, game_length, game_mode, difficulty, team_mode, origin_seed, Globals.ConnectionType.ENET)
+
+
+func _start_replay_game():
+	var replay_file_path: String = _configure_singleplayer_menu.get_selected_replay_file()
+	
+	# Store replay file path in globals for GameScene to access
+	Globals._replay_file_path = replay_file_path
+	
+	# Use default settings for replay (will be overridden by replay data)
+	var difficulty: Difficulty.enm = Difficulty.enm.EASY
+	var game_length: int = 30
+	var game_mode: GameMode.enm = GameMode.enm.BUILD
+	var team_mode: TeamMode.enm = TeamMode.enm.ONE_PLAYER_PER_TEAM
+	var origin_seed: int = 0  # Will be overridden by replay data
 	
 	start_game(PlayerMode.enm.SINGLEPLAYER, game_length, game_mode, difficulty, team_mode, origin_seed, Globals.ConnectionType.ENET)
 
