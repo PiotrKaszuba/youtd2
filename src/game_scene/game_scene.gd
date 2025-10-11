@@ -103,6 +103,9 @@ func _ready():
 	
 	print_verbose("Origin seed to: ", origin_seed)
 
+	# Setup replay system
+	_setup_replay_system()
+
 	_setup_players()
 	PlayerManager.send_players_created_signal()
 
@@ -278,6 +281,57 @@ func _save_player_exp_on_quit():
 		return
 
 	local_team.convert_local_player_score_to_exp()
+
+
+func _setup_replay_system():
+	var replay_file_path: String = Globals.get_replay_file_path()
+	
+	# Check if we're loading a replay
+	if !replay_file_path.is_empty():
+		print("GameScene: Loading replay from ", replay_file_path)
+		
+		var replay_player: ReplayPlayer = ReplayPlayer.new()
+		add_child(replay_player)
+		
+		var load_success: bool = replay_player.load_replay(replay_file_path)
+		if !load_success:
+			push_error("GameScene: Failed to load replay")
+			return
+		
+		_game_client.setup_replay_player(replay_player)
+		replay_player.start_playback()
+		Globals.set_is_replaying(true)
+		
+		# Connect to replay finished signal
+		replay_player.replay_finished.connect(_on_replay_finished)
+		
+		# Setup replay controls UI
+		_hud.set_replay_player(replay_player)
+		
+		print("GameScene: Replay playback started")
+	else:
+		# Normal gameplay - setup recorder
+		var player_mode: PlayerMode.enm = Globals.get_player_mode()
+		if player_mode == PlayerMode.enm.SINGLEPLAYER:
+			var metadata: ReplayMetadata = ReplayMetadata.new()
+			metadata.origin_seed = Globals.get_origin_seed()
+			metadata.difficulty = Globals.get_difficulty()
+			metadata.game_mode = Globals.get_game_mode()
+			metadata.wave_count = Globals.get_wave_count()
+			metadata.team_mode = Globals.get_team_mode()
+			metadata.player_mode = Globals.get_player_mode()
+			metadata.exp_password = Settings.get_setting(Settings.EXP_PASSWORD)
+			metadata.wisdom_upgrades = Settings.get_wisdom_upgrades()
+			# Builder ID will be set after builder selection
+			
+			var recorder: ReplayRecorder = ReplayRecorder.new()
+			add_child(recorder)
+			
+			# Start recording after builder is selected
+			recorder.start_recording(metadata)
+			_game_client.setup_replay_recorder(recorder)
+			
+			print("GameScene: Replay recording started")
 
 
 func _setup_players():
@@ -773,6 +827,13 @@ func _on_player_requested_return_from_horadric_cube():
 func _on_builder_menu_finished():
 	var builder_id: int = _builder_menu.get_builder_id()
 
+	# Update replay metadata with builder_id
+	var recorder: ReplayRecorder = Globals.get_replay_recorder()
+	if recorder != null && recorder.is_recording():
+		var metadata: ReplayMetadata = recorder.get_metadata()
+		if metadata != null:
+			metadata.builder_id = builder_id
+
 	var action: Action = ActionSelectBuilder.make(builder_id)
 	_game_client.add_action(action)
 
@@ -881,6 +942,15 @@ func _on_game_menu_quit_pressed():
 
 func _on_player_requested_quit_to_title():
 	_quit_to_title()
+
+
+func _on_replay_finished():
+	print("GameScene: Replay finished. Player can now continue playing.")
+	Globals.set_is_replaying(false)
+	
+	var local_player: Player = PlayerManager.get_local_player()
+	if local_player != null:
+		Messages.add_normal(local_player, "Replay finished. You can now continue playing.")
 
 
 func _quit_to_title():

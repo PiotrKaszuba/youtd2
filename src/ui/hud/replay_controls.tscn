@@ -1,0 +1,65 @@
+[gd_scene load_steps=3 format=3 uid="uid://bgnq7d3y0kqn3"]
+
+[ext_resource type="Script" path="res://src/ui/hud/replay_controls.gd" id="1_replay"]
+[ext_resource type="Theme" uid="uid://bql5sxaowafw3" path="res://resources/theme/wc3_theme.tres" id="2_theme"]
+
+[node name="ReplayControls" type="Control" node_paths=PackedStringArray("_speed_normal_button", "_speed_fast_button", "_speed_fastest_button", "_progress_label")]
+layout_mode = 3
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_right = 200.0
+offset_bottom = 80.0
+grow_horizontal = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_replay")
+_speed_normal_button = NodePath("PanelContainer/VBoxContainer/SpeedButtons/SpeedNormalButton")
+_speed_fast_button = NodePath("PanelContainer/VBoxContainer/SpeedButtons/SpeedFastButton")
+_speed_fastest_button = NodePath("PanelContainer/VBoxContainer/SpeedButtons/SpeedFastestButton")
+_progress_label = NodePath("PanelContainer/VBoxContainer/ProgressLabel")
+
+[node name="PanelContainer" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "REPLAY MODE"
+horizontal_alignment = 1
+
+[node name="ProgressLabel" type="Label" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "Replay: 0:00 / 0:00"
+horizontal_alignment = 1
+
+[node name="SpeedButtons" type="HBoxContainer" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="SpeedNormalButton" type="Button" parent="PanelContainer/VBoxContainer/SpeedButtons"]
+layout_mode = 2
+focus_mode = 0
+text = "1x"
+
+[node name="SpeedFastButton" type="Button" parent="PanelContainer/VBoxContainer/SpeedButtons"]
+layout_mode = 2
+focus_mode = 0
+text = "3x"
+
+[node name="SpeedFastestButton" type="Button" parent="PanelContainer/VBoxContainer/SpeedButtons"]
+layout_mode = 2
+focus_mode = 0
+text = "9x"
+
+[connection signal="pressed" from="PanelContainer/VBoxContainer/SpeedButtons/SpeedNormalButton" to="." method="_on_speed_normal_pressed"]
+[connection signal="pressed" from="PanelContainer/VBoxContainer/SpeedButtons/SpeedFastButton" to="." method="_on_speed_fast_pressed"]
+[connection signal="pressed" from="PanelContainer/VBoxContainer/SpeedButtons/SpeedFastestButton" to="." method="_on_speed_fastest_pressed"]
+

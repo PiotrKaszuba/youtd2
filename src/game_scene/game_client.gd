@@ -54,6 +54,10 @@ var _last_received_timeslot_list: Array = []
 @export var _chat_commands: ChatCommands
 @export var _select_unit: SelectUnit
 
+# Replay system components
+var _replay_recorder: ReplayRecorder = null
+var _replay_player: ReplayPlayer = null
+
 
 #########################
 ###     Built-in      ###
@@ -98,6 +102,22 @@ func set_paused_by_host(value: bool):
 func add_action(action: Action):
 	var serialized_action: Dictionary = action.serialize()
 	_game_host.receive_action.rpc_id(1, serialized_action)
+
+
+# Setup replay recorder for recording gameplay
+func setup_replay_recorder(recorder: ReplayRecorder):
+	_replay_recorder = recorder
+	Globals.set_replay_recorder(recorder)
+
+
+# Setup replay player for playback
+func setup_replay_player(player: ReplayPlayer):
+	_replay_player = player
+
+
+# Get current tick for replay save
+func get_current_tick() -> int:
+	return _current_tick
 
 
 @rpc("authority", "call_local", "reliable")
@@ -216,20 +236,36 @@ func _do_tick():
 	var need_timeslot: bool = _current_tick % _turn_length == 0
 	var have_timeslot: bool = _timeslot_map.has(_current_tick)
 	
-	if need_timeslot && !have_timeslot:
-		return
-
-	if need_timeslot:
-		var timeslot: Array = _timeslot_map[_current_tick]
-		_timeslot_map.erase(_current_tick)
-
-		for action in timeslot:
+	# During replay, inject actions from replay file
+	if _replay_player != null && _replay_player.is_playing():
+		var replay_actions: Array = _replay_player.get_actions_for_tick(_current_tick)
+		for action in replay_actions:
 			_execute_action(action)
+		
+		# Verify checksum at checkpoint ticks during replay
+		var metadata: ReplayMetadata = _replay_player.get_metadata()
+		if metadata != null && metadata.checkpoint_ticks.has(_current_tick):
+			ReplayStateVerifier.verify_checkpoint(metadata.replay_id, _current_tick)
+	else:
+		# Normal gameplay or recording
+		if need_timeslot && !have_timeslot:
+			return
 
-		var time_to_send_checksum: bool = _current_tick % CHECKSUM_PERIOD_TICKS == 0
-		if time_to_send_checksum:
-			var checksum: PackedByteArray = _calculate_game_state_checksum()
-			_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
+		if need_timeslot:
+			var timeslot: Array = _timeslot_map[_current_tick]
+			_timeslot_map.erase(_current_tick)
+
+			for action in timeslot:
+				_execute_action(action)
+			
+			# Record timeslot if recording
+			if _replay_recorder != null && _replay_recorder.is_recording():
+				_replay_recorder.record_timeslot(_current_tick, timeslot)
+
+			var time_to_send_checksum: bool = _current_tick % CHECKSUM_PERIOD_TICKS == 0
+			if time_to_send_checksum:
+				var checksum: PackedByteArray = _calculate_game_state_checksum()
+				_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
 
 	_update_state()
 	_current_tick += 1
