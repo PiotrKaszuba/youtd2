@@ -25,6 +25,7 @@ class_name GameScene extends Node
 @export var _tutorial_controller: TutorialController
 @export var _builder_menu: BuilderMenu
 @export var _range_checker: TowerPreview
+@export var _replay_manager: ReplayManager
 
 var _ui_input_is_enabled: bool = false
 var _map: Map = null
@@ -69,7 +70,12 @@ func _ready():
 	
 	EventBus.player_requested_help.connect(_on_player_requested_help)
 	EventBus.player_requested_quit_to_title.connect(_on_player_requested_quit_to_title)
+	_game_menu.save_replay_pressed.connect(_on_game_menu_save_replay)
 	EventBus.player_selected_builder.connect(_on_player_selected_builder)
+
+	if _replay_manager:
+		_replay_manager.replay_mode_changed.connect(_on_replay_mode_changed)
+		_replay_manager.playback_state_changed.connect(_on_replay_playback_state_changed)
 	EventBus.player_requested_start_game.connect(_on_player_requested_start_game)
 	EventBus.player_requested_next_wave.connect(_on_player_requested_next_wave)
 	EventBus.player_requested_to_roll_towers.connect(_on_player_requested_to_roll_towers)
@@ -877,6 +883,49 @@ func _on_player_requested_help():
 
 func _on_game_menu_quit_pressed():
 	_quit_to_title()
+
+
+func _on_game_menu_save_replay():
+	if _replay_manager:
+		var replay_path: String = _replay_manager.save_replay_from_current_game()
+		if !replay_path.is_empty():
+			Utils.add_ui_message(PlayerManager.get_local_player(), "Replay saved to: " + replay_path)
+
+
+func _on_replay_mode_changed(mode: ReplayManager.ReplayMode):
+	_update_ui_for_replay_mode(mode)
+
+
+func _on_replay_playback_state_changed(state: ReplayManager.PlaybackState):
+	_update_ui_for_playback_state(state)
+
+
+func _update_ui_for_replay_mode(mode: ReplayManager.ReplayMode):
+	# Update UI elements based on replay mode
+	match mode:
+		ReplayManager.ReplayMode.NONE:
+			# Normal gameplay mode
+			_set_ui_input_enabled(true)
+		ReplayManager.ReplayMode.RECORDING:
+			# Recording mode - disable certain UI elements
+			pass
+		ReplayManager.ReplayMode.PLAYBACK:
+			# Playback mode - lock player actions
+			_set_ui_input_enabled(false)
+
+
+func _update_ui_for_playback_state(state: ReplayManager.PlaybackState):
+	match state:
+		ReplayManager.PlaybackState.PLAYING:
+			# Hide pause menu when playing
+			_game_menu.visible = false
+		ReplayManager.PlaybackState.PAUSED:
+			# Show pause menu when paused
+			_game_menu.visible = true
+		ReplayManager.PlaybackState.FINISHED:
+			# Show pause menu when finished and allow continuing
+			_game_menu.visible = true
+			_set_ui_input_enabled(true)
 
 
 func _on_player_requested_quit_to_title():

@@ -11,6 +11,7 @@ enum Tab {
 
 signal continue_pressed()
 signal quit_pressed()
+signal save_replay_pressed()
 
 
 @export var _tab_container: TabContainer
@@ -59,6 +60,10 @@ func _on_settings_menu_ok_pressed():
 
 func _on_quit_button_pressed():
 	quit_pressed.emit()
+
+
+func _on_save_replay_button_pressed():
+	save_replay_pressed.emit()
 
 
 func _on_encyclopedia_button_pressed() -> void:
