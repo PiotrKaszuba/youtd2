@@ -1,4 +1,4 @@
-class_name ReplayManager extends Node
+extends Node
 
 # Main singleton for managing replay functionality
 # Handles recording, playback, and state verification
@@ -21,28 +21,27 @@ signal playback_state_changed(state: PlaybackState)
 signal replay_loaded(replay_file_path: String)
 signal replay_saved(replay_file_path: String)
 signal state_verification_failed(error_details: Dictionary)
+signal continue_pressed()
 
 var current_mode: ReplayMode = ReplayMode.NONE
 var playback_state: PlaybackState = PlaybackState.STOPPED
 var current_replay_file: String = ""
 
+var _game_client: GameClient
+
 # Recording state
-var _is_recording: bool = false
-var _recorded_actions: Array = []
+var _recorded_actions: Array = []  # Store actions in memory for binary serialization
 var _recording_start_tick: int = 0
 var _last_checksum_tick: int = 0
 
 # Playback state
-var _is_playback: bool = false
 var _playback_actions: Array = []
 var _playback_tick: int = 0
-var _playback_speed: float = 1.0
-var _original_game_speed: int = 1
 
 # State verification
 var _state_verifier: StateVerifier
-var _checksum_period: int = 90  # Every 90 ticks (3 seconds at 30 TPS) - more performance friendly
-var _detailed_checksums_enabled: bool = false  # Disabled by default for better performance
+var _checksum_period: int = 300
+var _detailed_checksums_enabled: bool = true
 
 # File paths
 const REPLAY_DIR: String = "user://replays/"
@@ -56,12 +55,11 @@ const BACKUP_DIR: String = "user://replays/backups/"
 
 func _ready():
 	_state_verifier = StateVerifier.new()
-	_state_verifier.set_checksum_frequency(_checksum_period)
+	add_child(_state_verifier)
 	_state_verifier.set_detailed_checksums_enabled(_detailed_checksums_enabled)
 	_create_directories()
 
-
-func _physics_process(_delta: float):
+func tick():
 	match current_mode:
 		ReplayMode.RECORDING:
 			_update_recording()
@@ -76,64 +74,55 @@ func _physics_process(_delta: float):
 func start_recording() -> bool:
 	if current_mode != ReplayMode.NONE:
 		return false
+	
+	_restore_original_state()
 
 	current_mode = ReplayMode.RECORDING
-	_is_recording = true
-	_recording_start_tick = _get_current_tick()
+	_recording_start_tick = 0
 
 	# Generate unique replay ID
 	current_replay_file = _generate_replay_id()
-	_recorded_actions.clear()
+	_recorded_actions.clear()  # Clear any previous recorded actions
 	_last_checksum_tick = 0
 
-	# Enable detailed checksums for recording to ensure accuracy
-	_enable_recording_checksums()
-
-	# Save metadata file
-	_save_replay_metadata()
-
-	# Backup current game state for restoration
-	_backup_game_state()
-
 	replay_mode_changed.emit(current_mode)
 	return true
 
 
-func stop_recording() -> bool:
-	if current_mode != ReplayMode.RECORDING:
-		return false
+# func stop_recording() -> bool:
+# 	if current_mode != ReplayMode.RECORDING:
+# 		return false
 
-	current_mode = ReplayMode.NONE
-	_is_recording = false
+# 	current_mode = ReplayMode.NONE
 
-	# Restore performance-friendly checksum settings
-	_restore_normal_checksums()
+# 	# Save replay
+# 	var binary_file_path: String = _save_replay()
 
-	# Update metadata with final information
-	_update_replay_metadata()
-
-	replay_mode_changed.emit(current_mode)
-	return true
+# 	replay_mode_changed.emit(current_mode)
+# 	return true
 
 
 func start_playback(replay_id: String) -> bool:
 	if current_mode != ReplayMode.NONE:
 		return false
-
+	
+	_restore_original_state()
+	
+	current_replay_file = replay_id
 	var replay_data: Dictionary = _load_replay_file(replay_id)
 	if replay_data.is_empty():
 		return false
+	
+	_recording_start_tick = 0
 
-	# Store original game state for restoration
-	_backup_game_state()
+	# Store original player data for restoration
+	_backup_data()
 
 	# Load replay state
 	_playback_actions = replay_data.get("actions", [])
 	_playback_tick = 0
-	_playback_speed = 1.0
 
 	current_mode = ReplayMode.PLAYBACK
-	_is_playback = true
 	playback_state = PlaybackState.PLAYING
 
 	# Load initial game state from replay
@@ -146,45 +135,38 @@ func start_playback(replay_id: String) -> bool:
 	return true
 
 
-func stop_playback() -> bool:
-	if current_mode != ReplayMode.PLAYBACK:
-		return false
+# func stop_playback() -> bool:
+# 	if current_mode != ReplayMode.PLAYBACK:
+# 		return false
 
-	current_mode = ReplayMode.NONE
-	_is_playback = false
-	playback_state = PlaybackState.STOPPED
+# 	current_mode = ReplayMode.NONE
+# 	playback_state = PlaybackState.STOPPED
 
-	# Restore original game state
-	_restore_original_game_state()
+# 	# Restore original game state
+# 	_restore_original_state()
 
-	replay_mode_changed.emit(current_mode)
-	playback_state_changed.emit(playback_state)
+# 	replay_mode_changed.emit(current_mode)
+# 	playback_state_changed.emit(playback_state)
 
-	return true
-
-
-func pause_playback() -> bool:
-	if playback_state != PlaybackState.PLAYING:
-		return false
-
-	playback_state = PlaybackState.PAUSED
-	playback_state_changed.emit(playback_state)
-	return true
+# 	return true
 
 
-func resume_playback() -> bool:
-	if playback_state != PlaybackState.PAUSED:
-		return false
+# func pause_playback() -> bool:
+# 	if playback_state != PlaybackState.PLAYING:
+# 		return false
 
-	playback_state = PlaybackState.PLAYING
-	playback_state_changed.emit(playback_state)
-	return true
+# 	playback_state = PlaybackState.PAUSED
+# 	playback_state_changed.emit(playback_state)
+# 	return true
 
 
-func set_playback_speed(speed: float) -> bool:
-	_playback_speed = max(0.1, min(5.0, speed))  # Clamp between 0.1x and 5.0x
-	Globals.set_update_ticks_per_physics_tick(_original_game_speed * _playback_speed)
-	return true
+# func resume_playback() -> bool:
+# 	if playback_state != PlaybackState.PAUSED:
+# 		return false
+
+# 	playback_state = PlaybackState.PLAYING
+# 	playback_state_changed.emit(playback_state)
+# 	return true
 
 
 func is_recording() -> bool:
@@ -220,62 +202,66 @@ func get_replay_list() -> Array:
 
 
 func save_replay_from_current_game() -> String:
-	# Replay is already being saved continuously as JSONL during recording
-	# Just need to finalize metadata
 	if current_mode == ReplayMode.RECORDING:
-		_update_replay_metadata()
-		return current_replay_file
+		# Save the current recording and return the replay ID
+		var binary_file_path: String = _save_replay()
+		return binary_file_path
 
 	return ""
 
+func get_checksum_filename(tick: int) -> String:
+	return STATE_DIR + current_replay_file + "-%d.json" % tick
 
-func verify_game_state() -> Dictionary:
-	return _state_verifier.verify_current_state()
+func verify_replay_state_at_tick(tick: int) -> Dictionary:
+	"""Verify the current game state against the recorded checksum at a specific tick"""
+	var checksum_file: String = get_checksum_filename(tick)
+	var result: Dictionary = _state_verifier.verify_against_recorded_state(checksum_file)
 
+	# Add tick information to result
+	result["tick"] = tick
 
-func set_checksum_frequency(ticks: int) -> void:
-	_checksum_period = max(1, ticks)
-	if _state_verifier:
-		_state_verifier.set_checksum_frequency(_checksum_period)
+	# Emit signal for UI feedback (but we removed this signal, so we'll handle it differently)
+	if not result.get("valid", true):
+		# Could emit a different signal or handle this in the calling code
+		var num_diffs: int = result["differences"].size()
+		Messages.add_error(PlayerManager.get_local_player(), "Invalid replay state! Num differences: %d" % num_diffs)
+	else:
+		Messages.add_normal(PlayerManager.get_local_player(), "Replay state is correct!")
 
-
-func set_detailed_checksums_enabled(enabled: bool) -> void:
-	_detailed_checksums_enabled = enabled
-	if _state_verifier:
-		_state_verifier.set_detailed_checksums_enabled(_detailed_checksums_enabled)
-
-
-func get_checksum_frequency() -> int:
-	return _checksum_period
-
-
-func get_detailed_checksums_enabled() -> bool:
-	return _detailed_checksums_enabled
+	return result
 
 
-func _enable_recording_checksums() -> void:
-	# Enable detailed checksums with higher frequency for accurate recording
-	_checksum_period = 30  # 1 second at 30 TPS
-	_detailed_checksums_enabled = true
-
-	if _state_verifier:
-		_state_verifier.set_checksum_frequency(_checksum_period)
-		_state_verifier.set_detailed_checksums_enabled(_detailed_checksums_enabled)
-
-
-func _restore_normal_checksums() -> void:
-	# Restore performance-friendly settings for normal gameplay
-	_checksum_period = 90  # 3 seconds at 30 TPS
-	_detailed_checksums_enabled = false
-
-	if _state_verifier:
-		_state_verifier.set_checksum_frequency(_checksum_period)
-		_state_verifier.set_detailed_checksums_enabled(_detailed_checksums_enabled)
-
+func is_tick_checksum_available(tick: int) -> bool:
+	"""Check if a checksum is available for the given tick"""
+	var checksum_file: String = get_checksum_filename(tick)
+	return FileAccess.file_exists(checksum_file)
 
 #########################
 ###      Private      ###
 #########################
+
+func _get_game_client() -> GameClient:
+	if is_instance_valid(_game_client):
+		return _game_client
+	var game_client: GameClient = get_tree().root.find_child("GameClient", true, false)
+	_game_client = game_client
+	return _game_client
+
+
+func _get_select_unit() -> SelectUnit:
+	return _get_game_client()._select_unit
+
+
+func _get_build_space() -> BuildSpace:
+	return _get_game_client()._build_space
+
+
+func _get_chat_commands() -> ChatCommands:
+	return _get_game_client()._chat_commands
+
+
+func _get_hud() -> HUD:
+	return _get_game_client()._hud
 
 func _create_directories():
 	var dirs: Array = [REPLAY_DIR, STATE_DIR, BACKUP_DIR]
@@ -285,16 +271,20 @@ func _create_directories():
 
 
 func _get_current_tick() -> int:
-	# For now, use a simple counter based on elapsed time
-	# In a real implementation, this would be synchronized with the game tick system
-	return floori(Time.get_ticks_msec() / (1000.0 / 30.0))  # 30 ticks per second
+	var game_client: GameClient = _get_game_client()
+	if is_instance_valid(game_client):
+		return _get_game_client()._current_tick
+	return 0
 
+func _should_generate_checksum() -> bool:
+	var current_tick: int = _get_current_tick()
+	return current_tick - _last_checksum_tick >= _checksum_period
 
 func _update_recording():
 	var current_tick: int = _get_current_tick()
 
 	# Record periodic checksums if needed
-	if _state_verifier.should_generate_checksum():
+	if _should_generate_checksum():
 		_record_game_state_checksum(current_tick)
 
 
@@ -302,7 +292,7 @@ func _update_playback():
 	if playback_state != PlaybackState.PLAYING:
 		return
 
-	var current_tick: int = _get_current_tick()
+	var current_tick: int = _get_current_tick() - _recording_start_tick
 
 	# Execute actions for current tick
 	while _playback_tick < _playback_actions.size():
@@ -315,13 +305,25 @@ func _update_playback():
 		else:
 			break
 
+	# Verify state against recorded checksums periodically
+	var should_generate: bool = _should_generate_checksum()
+	var is_checksum_available: bool = is_tick_checksum_available(current_tick)
+	if should_generate:
+		if is_checksum_available:
+			var verification_result: Dictionary = verify_replay_state_at_tick(current_tick)
+			
+			#if not verification_result.get("valid", true):
+				## Pause playback if state verification fails
+				#playback_state = PlaybackState.PAUSED
+				#playback_state_changed.emit(playback_state)
+
 	# Check if playback is finished
 	if _playback_tick >= _playback_actions.size():
 		_finish_playback()
 
 
 func _record_action(action: Dictionary):
-	if !_is_recording:
+	if !is_recording():
 		return
 
 	# Only record actions that are meaningful for replays
@@ -333,19 +335,17 @@ func _record_action(action: Dictionary):
 	var action_data: Dictionary = action.duplicate()
 	action_data["tick"] = current_tick - _recording_start_tick
 
-	# Append to JSONL file
-	var replay_file_path: String = REPLAY_DIR + current_replay_file + ".jsonl"
-	var file: FileAccess = FileAccess.open(replay_file_path, FileAccess.READ_WRITE)
-	if file:
-		file.seek_end()
-		file.store_line(JSON.stringify(action_data))
-		file.close()
+	# Store action in memory for binary serialization
+	_recorded_actions.append(action_data)
 
 
 func _record_game_state_checksum(tick: int):
 	var checksum_data: Dictionary = _state_verifier.generate_checksum_tree()
-	var checksum_file: String = STATE_DIR + current_replay_file + "-%d.json" % tick
-
+	var checksum_file: String = get_checksum_filename(tick)
+	
+	# Update last checksum tick
+	_last_checksum_tick = _get_current_tick()
+	
 	# Save checksum to file
 	var file: FileAccess = FileAccess.open(checksum_file, FileAccess.WRITE)
 	if file:
@@ -353,13 +353,50 @@ func _record_game_state_checksum(tick: int):
 		file.close()
 
 
+func _save_replay() -> String:
+	if _recorded_actions.is_empty():
+		return ""
+
+	# Generate filename if not already set
+	if current_replay_file.is_empty():
+		current_replay_file = _generate_replay_id()
+
+	var binary_file_path: String = REPLAY_DIR + current_replay_file + ".bin"
+	var file: FileAccess = FileAccess.open(binary_file_path, FileAccess.WRITE)
+
+	if file:
+		# Write the number of actions first (as a 32-bit integer)
+		file.store_32(_recorded_actions.size())
+
+		# Write each action as a Godot variant (preserves types)
+		for action_data in _recorded_actions:
+			file.store_var(action_data)
+
+		file.close()
+
+		# Save metadata file as well
+		_save_replay_metadata()
+
+		replay_saved.emit(current_replay_file)
+		return current_replay_file
+
+	return ""
+
+
 func _execute_replay_action(action_data: Dictionary):
 	# Remove tick from action data before execution
-	var action: Dictionary = action_data.duplicate()
-	action.erase("tick")
-
+	var action_copy: Dictionary = action_data.duplicate()
+	action_copy.erase("tick")
+	
+	var action := {}
+	for k in action_copy.keys():
+		action[int(k)] = action_copy[k]
+	
 	# Execute the action (same as normal execution but with recorded data)
 	var action_type: Action.Type = action[Action.Field.TYPE]
+	if not Action.is_replayable_type(action_type):
+		return
+		
 	var player_id: int = action[Action.Field.PLAYER_ID]
 	var player: Player = PlayerManager.get_player(player_id)
 
@@ -390,29 +427,29 @@ func _execute_replay_action(action_data: Dictionary):
 
 
 func _execute_chat_action(action: Dictionary, player: Player):
-	var chat_commands: ChatCommands = get_node("/root/ChatCommands") if get_tree().root.has_node("ChatCommands") else null
-	var hud: HUD = get_node("/root/HUD") if get_tree().root.has_node("HUD") else null
+	var chat_commands: ChatCommands = _get_chat_commands()
+	var hud: HUD = _get_hud()
 
 	if chat_commands and hud:
 		ActionChat.execute(action, player, hud, chat_commands)
 
 
 func _execute_build_tower_action(action: Dictionary, player: Player):
-	var build_space: BuildSpace = get_node("/root/BuildSpace") if get_tree().root.has_node("BuildSpace") else null
+	var build_space: BuildSpace = _get_build_space()
 
 	if build_space:
 		ActionBuildTower.execute(action, player, build_space)
 
 
 func _execute_upgrade_tower_action(action: Dictionary, player: Player):
-	var select_unit: SelectUnit = get_node("/root/SelectUnit") if get_tree().root.has_node("SelectUnit") else null
+	var select_unit: SelectUnit = _get_select_unit()
 
 	if select_unit:
 		ActionUpgradeTower.execute(action, player, select_unit)
 
 
 func _execute_sell_tower_action(action: Dictionary, player: Player):
-	var build_space: BuildSpace = get_node("/root/BuildSpace") if get_tree().root.has_node("BuildSpace") else null
+	var build_space: BuildSpace = _get_build_space()
 
 	if build_space:
 		ActionSellTower.execute(action, player, build_space)
@@ -478,42 +515,8 @@ func _finish_playback():
 	playback_state = PlaybackState.FINISHED
 	playback_state_changed.emit(playback_state)
 
-	# Pause the game when replay finishes
-	get_tree().paused = true
-
-
-func _save_replay() -> String:
-	var timestamp: String = Time.get_datetime_string_from_system().replace(":", "_").replace("-", "_")
-	var filename: String = "replay_%s.replay" % timestamp
-	var file_path: String = REPLAY_DIR + filename
-
-	var replay_data: Dictionary = {
-		"metadata": {
-			"version": "1.0",
-			"timestamp": Time.get_unix_time_from_system(),
-			"game_seed": Globals.get_origin_seed(),
-			"wave_count": Globals.get_wave_count(),
-			"difficulty": Globals.get_difficulty(),
-			"game_mode": Globals.get_game_mode(),
-			"player_count": PlayerManager.get_player_list().size(),
-		},
-		"initial_state": _get_initial_game_state(),
-		"actions": _recorded_actions,
-		"checksums": _get_checksum_file_list(),
-	}
-
-	# Save to file
-	var file: FileAccess = FileAccess.open(file_path, FileAccess.WRITE)
-	if file:
-		file.store_string(JSON.stringify(replay_data))
-		file.close()
-
-		current_replay_file = file_path
-		replay_saved.emit(file_path)
-
-		return file_path
-
-	return ""
+	# Pause the game when replay finishes - use continue_pressed signal to pause the game in singleplayer
+	continue_pressed.emit()
 
 
 func _load_replay_file(replay_id: String) -> Dictionary:
@@ -525,19 +528,22 @@ func _load_replay_file(replay_id: String) -> Dictionary:
 	if !metadata:
 		return {}
 
-	# Load actions from JSONL file
+	# Load actions from binary file
 	var actions: Array = []
-	var jsonl_file: String = REPLAY_DIR + replay_id + ".jsonl"
+	var binary_file: String = REPLAY_DIR + replay_id + ".bin"
 
-	if FileAccess.file_exists(jsonl_file):
-		var file: FileAccess = FileAccess.open(jsonl_file, FileAccess.READ)
+	if FileAccess.file_exists(binary_file):
+		var file: FileAccess = FileAccess.open(binary_file, FileAccess.READ)
 		if file:
-			while !file.eof_reached():
-				var line: String = file.get_line()
-				if !line.is_empty():
-					var action: Dictionary = JSON.parse_string(line)
-					if action:
-						actions.append(action)
+			# Read the number of actions first
+			var action_count: int = file.get_32()
+
+			# Read each action as a Godot variant (preserves types)
+			for i in range(action_count):
+				var action = file.get_var()
+				if action != null:
+					actions.append(action)
+
 			file.close()
 
 	metadata["actions"] = actions
@@ -601,44 +607,72 @@ func _calculate_replay_duration(replay_data: Dictionary) -> int:
 func _get_initial_game_state() -> Dictionary:
 	# Capture current game state for restoration
 	return {
+		"static_var_states": _serialize_static_var_states(),
 		"globals": _serialize_globals(),
-		"players": _serialize_players(),
-		"towers": _serialize_towers(),
-		"items": _serialize_items(),
 		"wisdom_upgrades": _serialize_wisdom_upgrades(),
+		"exp_password": Settings.get_setting(Settings.EXP_PASSWORD),
 	}
 
 
 func _restore_initial_game_state(replay_data: Dictionary):
 	var initial_state: Dictionary = replay_data.get("initial_state", {})
 
-	# Restore globals
+	_restore_exp_password(initial_state.get("exp_password", ""))
+	_restore_static_var_states(initial_state.get("static_var_states", {}))
 	_restore_globals(initial_state.get("globals", {}))
-
-	# Restore players
-	_restore_players(initial_state.get("players", []))
-
-	# Restore towers
-	_restore_towers(initial_state.get("towers", []))
-
-	# Restore items
-	_restore_items(initial_state.get("items", []))
-
-	# Restore wisdom upgrades
 	_restore_wisdom_upgrades(initial_state.get("wisdom_upgrades", {}))
 
 
-func _backup_game_state():
+func _backup_data():
 	# This would need to be implemented to save current state before replay
-	# For now, just store basic globals
-	pass
+	# Write exp password to a backup file for that replay
+
+	var backup_data: Dictionary = {
+		"exp_password": Settings.get_setting(Settings.EXP_PASSWORD),
+	}
+	
+	var backup_file: String = BACKUP_DIR + current_replay_file + ".json"
+	var file: FileAccess = FileAccess.open(backup_file, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(backup_data))
+		file.close()
 
 
-func _restore_original_game_state():
+func _restore_original_state():
 	# This would need to be implemented to restore state after replay
 	# For now, just reset to normal mode
 	current_mode = ReplayMode.NONE
 	playback_state = PlaybackState.STOPPED
+	current_replay_file = ""
+
+	_recorded_actions.clear()
+	_recording_start_tick = 0
+	_last_checksum_tick = 0
+
+	_playback_actions.clear()
+	_playback_tick = 0
+	_checksum_period = 300
+	_detailed_checksums_enabled = true
+	_state_verifier.set_detailed_checksums_enabled(_detailed_checksums_enabled)
+	
+	_game_client = null
+	_state_verifier._game_client = null
+
+
+func _serialize_static_var_states() -> Dictionary:
+	return {
+		"ItemContainerUidMax": ItemContainer._uid_max,
+		"ItemUidMax": Item._uid_max,
+		"AutocastUidMax": Autocast._uid_max,
+		"UnitUidMax": Unit._uid_max,
+	}
+
+
+func _restore_static_var_states(static_var_states: Dictionary):
+	ItemContainer._uid_max = static_var_states.get("ItemContainerUidMax", 1)
+	Item._uid_max = static_var_states.get("ItemUidMax", 1)
+	Autocast._uid_max = static_var_states.get("AutocastUidMax", 1)
+	Unit._uid_max = static_var_states.get("UnitUidMax", 1)
 
 
 func _serialize_globals() -> Dictionary:
@@ -651,46 +685,13 @@ func _serialize_globals() -> Dictionary:
 	}
 
 
-func _serialize_players() -> Array:
-	var players: Array = []
-	var player_list: Array = PlayerManager.get_player_list()
-
-	for player in player_list:
-		players.append({
-			"id": player.get_id(),
-			"name": player.get_player_name(),
-			"experience": player.get_experience(),
-			"gold": player.get_gold(),
-		})
-
-	return players
-
-
-func _serialize_towers() -> Array:
-	var towers: Array = []
-	var tower_list: Array = Utils.get_tower_list()
-
-	for tower in tower_list:
-		towers.append({
-			"uid": tower.get_uid(),
-			"id": tower.get_id(),
-			"position": [tower.position.x, tower.position.y],
-			"player_id": tower.get_player().get_id(),
-			"experience": tower.get_experience(),
-			"damage_dealt": tower.get_damage_dealt(),
-		})
-
-	return towers
-
-
-func _serialize_items() -> Array:
-	# Implementation needed for item serialization
-	return []
-
-
 func _serialize_wisdom_upgrades() -> Dictionary:
 	return Settings.get_wisdom_upgrades()
 
+
+func _restore_exp_password(exp_password: String):
+	Settings.set_setting(Settings.EXP_PASSWORD, exp_password)
+	Settings.flush()
 
 func _restore_globals(globals_data: Dictionary):
 	Globals._origin_seed = globals_data.get("origin_seed", 0)
@@ -700,41 +701,8 @@ func _restore_globals(globals_data: Dictionary):
 	Globals._team_mode = globals_data.get("team_mode", 0)
 
 
-func _restore_players(players_data: Array):
-	# Implementation needed for player restoration
-	# For now, just ensure players exist
-	pass
-
-
-func _restore_towers(towers_data: Array):
-	# Implementation needed for tower restoration
-	# For now, just clear existing towers
-	var tower_list: Array = Utils.get_tower_list()
-	for tower in tower_list:
-		if tower.get_player() == PlayerManager.get_local_player():
-			tower.queue_free()
-
-
-func _restore_items(items_data: Array):
-	# Implementation needed for item restoration
-	# For now, just clear player items
-	var local_player: Player = PlayerManager.get_local_player()
-	if local_player:
-		var item_stash: ItemContainer = local_player.get_item_stash()
-		var horadric_stash: ItemContainer = local_player.get_horadric_stash()
-
-		# Clear existing items
-		var items_to_remove: Array = []
-		items_to_remove.append_array(item_stash.get_item_list())
-		items_to_remove.append_array(horadric_stash.get_item_list())
-
-		for item in items_to_remove:
-			item_stash.remove_item(item)
-			horadric_stash.remove_item(item)
-
-
 func _restore_wisdom_upgrades(upgrades_data: Dictionary):
-	Settings.set_wisdom_upgrades(upgrades_data)
+	Settings.set_setting(Settings.WISDOM_UPGRADES_CACHED, upgrades_data)
 
 
 func _generate_replay_id() -> String:
@@ -753,10 +721,14 @@ func _save_replay_metadata() -> void:
 		"wave_count": Globals.get_wave_count(),
 		"difficulty": Globals.get_difficulty(),
 		"game_mode": Globals.get_game_mode(),
+		"team_mode": Globals.get_team_mode(),
 		"player_count": PlayerManager.get_player_list().size(),
 		"recording_start_tick": _recording_start_tick,
 		"checksum_period": _checksum_period,
 		"detailed_checksums": _detailed_checksums_enabled,
+		"recording_end_tick": _get_current_tick(),
+		"duration_ticks": _get_current_tick() - _recording_start_tick,
+		"initial_state": _get_initial_game_state(),
 	}
 
 	var metadata_file: String = REPLAY_DIR + current_replay_file + ".json"
@@ -764,26 +736,6 @@ func _save_replay_metadata() -> void:
 	if file:
 		file.store_string(JSON.stringify(metadata, "\t"))
 		file.close()
-
-
-func _update_replay_metadata() -> void:
-	var metadata_file: String = REPLAY_DIR + current_replay_file + ".json"
-	var file: FileAccess = FileAccess.open(metadata_file, FileAccess.READ)
-	if !file:
-		return
-
-	var content: String = file.get_as_text()
-	file.close()
-
-	var metadata: Dictionary = JSON.parse_string(content)
-	if metadata:
-		metadata["recording_end_tick"] = _get_current_tick()
-		metadata["duration_ticks"] = metadata["recording_end_tick"] - metadata["recording_start_tick"]
-
-		file = FileAccess.open(metadata_file, FileAccess.WRITE)
-		if file:
-			file.store_string(JSON.stringify(metadata, "\t"))
-			file.close()
 
 
 func _get_state_file_list() -> Array:

@@ -3,36 +3,20 @@ class_name StateVerifier extends Node
 # Handles comprehensive game state verification with checksum trees
 # Creates hierarchical checksums for detailed state comparison
 
-var _current_verification_tree: Dictionary = {}
+var _game_client: GameClient
 
 # Configuration for checksum frequency and granularity
-var _checksum_frequency: int = 30  # Every 30 ticks (1 second at 30 TPS)
 var _detailed_checksums_enabled: bool = true  # Enable per-entity detailed checksums
-var _last_checksum_tick: int = 0
-
 
 #########################
 ###       Public      ###
 #########################
 
-func set_checksum_frequency(ticks: int) -> void:
-	_checksum_frequency = max(1, ticks)  # Minimum 1 tick
-
-
 func set_detailed_checksums_enabled(enabled: bool) -> void:
 	_detailed_checksums_enabled = enabled
 
-
-func should_generate_checksum() -> bool:
-	var current_tick: int = _get_current_tick()
-	return current_tick - _last_checksum_tick >= _checksum_frequency
-
-
 func generate_checksum_tree() -> Dictionary:
 	"""Generate a hierarchical checksum tree of the current game state"""
-
-	# Update last checksum tick
-	_last_checksum_tick = _get_current_tick()
 
 	var root_checksum: Dictionary = {
 		"type": "root",
@@ -49,30 +33,12 @@ func generate_checksum_tree() -> Dictionary:
 		root_checksum["children"]["towers"] = _generate_towers_checksum()
 		root_checksum["children"]["creeps"] = _generate_creeps_checksum()
 		root_checksum["children"]["items"] = _generate_items_checksum()
-		root_checksum["children"]["projectiles"] = _generate_projectiles_checksum()
+		# root_checksum["children"]["projectiles"] = _generate_projectiles_checksum()
 
 	# Generate root checksum from all children
-	root_checksum["checksum"] = _calculate_root_checksum(root_checksum["children"])
+	root_checksum["checksum"] = _calculate_combined_checksum(root_checksum["children"])
 
 	return root_checksum
-
-
-func verify_current_state() -> Dictionary:
-	"""Verify current game state and return any discrepancies"""
-
-	var current_tree: Dictionary = generate_checksum_tree()
-
-	# Compare with expected state if available
-	# For now, just validate internal consistency
-
-	var errors: Array = []
-	_validate_tree_consistency(current_tree, errors)
-
-	return {
-		"valid": errors.is_empty(),
-		"errors": errors,
-		"tree": current_tree,
-	}
 
 
 func compare_states(state_a: Dictionary, state_b: Dictionary) -> Dictionary:
@@ -88,25 +54,56 @@ func compare_states(state_a: Dictionary, state_b: Dictionary) -> Dictionary:
 	return differences
 
 
+func load_checksum_from_file(file_path: String) -> Dictionary:
+	"""Load a checksum tree from a file"""
+	if not FileAccess.file_exists(file_path):
+		return {}
+
+	var file_content: String = FileAccess.get_file_as_string(file_path)
+	if file_content.is_empty():
+		return {}
+
+	var checksum_data: Dictionary = JSON.parse_string(file_content)
+	return checksum_data if checksum_data else {}
+
+
+func verify_against_recorded_state(recorded_checksum_path: String) -> Dictionary:
+	"""Verify current state against a recorded checksum file"""
+	var result: Dictionary = {
+		"valid": true,
+		"errors": [],
+		"file_path": recorded_checksum_path
+	}
+
+	# Load the recorded checksum
+	var recorded_checksum: Dictionary = load_checksum_from_file(recorded_checksum_path)
+	if recorded_checksum.is_empty():
+		result["errors"].append("Could not load recorded checksum from %s" % recorded_checksum_path)
+		result["valid"] = false
+		return result
+
+	# Generate current state checksum
+	var current_checksum: Dictionary = generate_checksum_tree()
+
+	# Validate tree consistency
+	var errors: Array = []
+	_validate_tree_consistency(current_checksum, errors)
+
+	# Compare the checksums
+	var differences: Dictionary = compare_states(recorded_checksum, current_checksum)
+
+	if differences.get("root_different", false) or not differences.get("differences", []).is_empty():
+		result["valid"] = false
+		result["differences"] = differences["differences"]
+		result["recorded_checksum"] = recorded_checksum
+		result["current_checksum"] = current_checksum
+
+	return result
+
+
 #########################
 ###      Private      ###
 #########################
-
-func _calculate_root_checksum(children: Dictionary) -> String:
-	"""Calculate checksum for the root node based on children"""
-
-	var ctx: HashingContext = HashingContext.new()
-	ctx.start(HashingContext.HASH_SHA256)
-
-	var combined_data: PackedByteArray = PackedByteArray()
-
-	for child_type in children:
-		var child: Dictionary = children[child_type]
-		combined_data.append_array(child["checksum"].to_utf8_buffer())
-
-	ctx.update(combined_data)
-	return ctx.finish().hex_encode()
-
 
 func _generate_globals_checksum() -> Dictionary:
 	"""Generate checksum for global game state"""
@@ -226,27 +223,27 @@ func _generate_items_checksum() -> Dictionary:
 	}
 
 
-func _generate_projectiles_checksum() -> Dictionary:
-	"""Generate checksum for all projectiles"""
+# func _generate_projectiles_checksum() -> Dictionary:
+# 	"""Generate checksum for all projectiles"""
 
-	var projectile_checksums: Dictionary = {}
+# 	var projectile_checksums: Dictionary = {}
 
-	var projectile_list: Array = get_tree().get_nodes_in_group("projectiles")
-	for projectile in projectile_list:
-		var projectile_data: Dictionary = _get_projectile_data(projectile)
-		projectile_checksums["projectile_%d" % projectile.get_instance_id()] = {
-			"type": "projectile",
-			"checksum": _calculate_node_checksum(projectile_data),
-			"data": projectile_data,
-		}
+# 	var projectile_list: Array = get_tree().get_nodes_in_group("projectiles")
+# 	for projectile in projectile_list:
+# 		var projectile_data: Dictionary = _get_projectile_data(projectile)
+# 		projectile_checksums["projectile_%d" % projectile.get_instance_id()] = {
+# 			"type": "projectile",
+# 			"checksum": _calculate_node_checksum(projectile_data),
+# 			"data": projectile_data,
+# 		}
 
-	var combined_checksum: String = _calculate_combined_checksum(projectile_checksums)
+# 	var combined_checksum: String = _calculate_combined_checksum(projectile_checksums)
 
-	return {
-		"type": "projectiles",
-		"checksum": combined_checksum,
-		"children": projectile_checksums,
-	}
+# 	return {
+# 		"type": "projectiles",
+# 		"checksum": combined_checksum,
+# 		"children": projectile_checksums,
+# 	}
 
 
 func _calculate_node_checksum(data: Dictionary) -> String:
@@ -272,7 +269,9 @@ func _calculate_combined_checksum(children: Dictionary) -> String:
 	# Sort keys for deterministic checksum
 	var sorted_keys: Array = children.keys()
 	sorted_keys.sort()
-
+	
+	if sorted_keys.size() == 0:
+		combined_data.append(0)
 	for key in sorted_keys:
 		var child: Dictionary = children[key]
 		combined_data.append_array(child["checksum"].to_utf8_buffer())
@@ -283,11 +282,13 @@ func _calculate_combined_checksum(children: Dictionary) -> String:
 
 func _get_player_data(player: Player) -> Dictionary:
 	"""Extract serializable data from a player"""
+	var exp_password: String = Settings.get_setting(Settings.EXP_PASSWORD)
+	var player_exp: int = ExperiencePassword.decode(exp_password)
 
 	return {
 		"id": player.get_id(),
 		"name": player.get_player_name(),
-		"experience": player.get_experience(),
+		"experience": player_exp,
 		"gold": player.get_gold(),
 		"gold_farmed": player.get_gold_farmed(),
 		"total_damage": player.get_total_damage(),
@@ -307,12 +308,8 @@ func _get_tower_data(tower: Tower) -> Dictionary:
 		"position_x": tower.position.x,
 		"position_y": tower.position.y,
 		"player_id": tower.get_player().get_id(),
-		"experience": tower.get_experience(),
-		"damage_dealt": tower.get_damage_dealt(),
-		"health": tower.get_health(),
-		"max_health": tower.get_max_health(),
-		"attack_damage": tower.get_attack_damage(),
-		"attack_speed": tower.get_attack_speed(),
+		"experience": tower._experience,
+		"damage_dealt": tower._damage_dealt_total,
 	}
 
 
@@ -321,15 +318,9 @@ func _get_creep_data(creep: Creep) -> Dictionary:
 
 	return {
 		"uid": creep.get_uid(),
-		"id": creep.get_id(),
 		"position_x": creep.position.x,
 		"position_y": creep.position.y,
 		"health": creep.get_health(),
-		"max_health": creep.get_max_health(),
-		"move_speed": creep.get_move_speed(),
-		"path_progress": creep.get_path_progress(),
-		"wave_id": creep.get_wave_id(),
-		"player_id": creep.get_player_id(),
 	}
 
 
@@ -341,30 +332,26 @@ func _get_item_data(item: Item) -> Dictionary:
 		"id": item.get_id(),
 		"rarity": item.get_rarity(),
 		"carrier_uid": item.get_carrier().get_uid() if item.get_carrier() else 0,
-		"container_uid": item.get_container().get_uid() if item.get_container() else 0,
 	}
 
 
-func _get_projectile_data(projectile) -> Dictionary:
-	"""Extract serializable data from a projectile"""
+# func _get_projectile_data(projectile) -> Dictionary:
+# 	"""Extract serializable data from a projectile"""
 
-	return {
-		"position_x": projectile.position.x,
-		"position_y": projectile.position.y,
-		"direction_x": projectile.direction.x if projectile.direction else 0,
-		"direction_y": projectile.direction.y if projectile.direction else 0,
-		"damage": projectile.damage if projectile.damage else 0,
-		"speed": projectile.speed if projectile.speed else 0,
-		"lifetime": projectile.lifetime if projectile.lifetime else 0,
-		"remaining_lifetime": projectile.remaining_lifetime if projectile.remaining_lifetime else 0,
-	}
+# 	return {
+# 		"position_x": projectile._position_wc3.x,
+# 		"position_y": projectile._position_wc3.y,
+# 		"damage_ratio": projectile._damage_ratio,
+# 		"crit_ratio": projectile._crit_ratio,
+# 		"remaining_lifetime": projectile._lifetime_timer.time_left
+# 	}
 
 
 func _validate_tree_consistency(tree: Dictionary, errors: Array, path: String = ""):
 	"""Validate internal consistency of a checksum tree"""
 
 	# Check if checksum matches calculated value
-	var calculated_checksum: String = _calculate_root_checksum(tree.get("children", {}))
+	var calculated_checksum: String = _calculate_combined_checksum(tree.get("children", {}))
 	if tree.get("checksum") != calculated_checksum:
 		errors.append({
 			"path": path,
@@ -379,6 +366,18 @@ func _validate_tree_consistency(tree: Dictionary, errors: Array, path: String = 
 		var child_path: String = path + "/" + child_name if path else child_name
 		_validate_tree_consistency(children[child_name], errors, child_path)
 
+func _unique_sorted(a: Array) -> Array:
+	var b := a.duplicate()
+	b.sort()
+	var out: Array = []
+	var first := true
+	var last = null
+	for v in b:
+		if first or v != last:
+			out.append(v)
+			last = v
+			first = false
+	return out
 
 func _compare_tree_nodes(node_a: Dictionary, node_b: Dictionary, path: String, differences: Array):
 	"""Compare two tree nodes and record differences"""
@@ -399,7 +398,7 @@ func _compare_tree_nodes(node_a: Dictionary, node_b: Dictionary, path: String, d
 	var all_keys: Array = []
 	all_keys.append_array(children_a.keys())
 	all_keys.append_array(children_b.keys())
-	all_keys = Utils.unique(all_keys)
+	all_keys = _unique_sorted(all_keys)
 
 	for key in all_keys:
 		var child_path: String = path + "/" + key if path else key
@@ -418,8 +417,15 @@ func _compare_tree_nodes(node_a: Dictionary, node_b: Dictionary, path: String, d
 			_compare_tree_nodes(children_a[key], children_b[key], child_path, differences)
 
 
-func _get_current_tick() -> int:
-	"""Get current game tick (implementation depends on game architecture)"""
+func _get_game_client() -> GameClient:
+	if is_instance_valid(_game_client):
+		return _game_client
+	var game_client: GameClient = get_tree().root.find_child("GameClient", true, false)
+	_game_client = game_client
+	return _game_client
 
-	# For now, use the same implementation as ReplayManager
-	return floori(Time.get_ticks_msec() / (1000.0 / 30.0))  # 30 ticks per second
+func _get_current_tick() -> int:
+	var game_client: GameClient = _get_game_client()
+	if is_instance_valid(game_client):
+		return _get_game_client()._current_tick
+	return 0
