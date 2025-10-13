@@ -25,7 +25,7 @@ class_name GameScene extends Node
 @export var _tutorial_controller: TutorialController
 @export var _builder_menu: BuilderMenu
 @export var _range_checker: TowerPreview
-@export var _replay_manager: ReplayManager
+@onready var _replay_manager: ReplayManager = get_node("/root/ReplayManager")
 
 var _ui_input_is_enabled: bool = false
 var _map: Map = null
@@ -145,6 +145,8 @@ func _ready():
 	_check_nodes_mapped_to_players()
 
 	_camera.position = _get_camera_origin_pos()
+	
+	_replay_manager.start_recording()
 	
 #	NOTE: when game initially starts, we need to wait a bit for client-host connection to be established. Until that point, show shadows to block input and indicate that input is not possible.
 	_builder_menu.show()
@@ -889,7 +891,7 @@ func _on_game_menu_save_replay():
 	if _replay_manager:
 		var replay_path: String = _replay_manager.save_replay_from_current_game()
 		if !replay_path.is_empty():
-			Utils.add_ui_message(PlayerManager.get_local_player(), "Replay saved to: " + replay_path)
+			Messages.add_normal(PlayerManager.get_local_player(), "Replay saved to: " + replay_path)
 
 
 func _on_replay_mode_changed(mode: ReplayManager.ReplayMode):
@@ -918,13 +920,16 @@ func _update_ui_for_playback_state(state: ReplayManager.PlaybackState):
 	match state:
 		ReplayManager.PlaybackState.PLAYING:
 			# Hide pause menu when playing
-			_game_menu.visible = false
+			if _game_menu.visible:
+				_toggle_game_menu()
 		ReplayManager.PlaybackState.PAUSED:
 			# Show pause menu when paused
-			_game_menu.visible = true
+			if not _game_menu.visible:
+				_toggle_game_menu()
 		ReplayManager.PlaybackState.FINISHED:
 			# Show pause menu when finished and allow continuing
-			_game_menu.visible = true
+			if not _game_menu.visible:
+				_toggle_game_menu()
 			_set_ui_input_enabled(true)
 
 
@@ -940,6 +945,7 @@ func _quit_to_title():
 #	NOTE: need to use load() here instead of preload()
 #	because preload() causes an error here since Godot
 #	4.1->4.3 migration, for unknown reason.
+	_replay_manager._restore_original_state()
 	var title_screen_scene: PackedScene = load("res://src/ui/title_screen/title_screen.tscn")
 	get_tree().change_scene_to_packed(title_screen_scene)
 
