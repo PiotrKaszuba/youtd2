@@ -79,18 +79,21 @@ func serialize() -> Dictionary:
 	return _data
 
 
+# Exclude UI-only actions and other non-gameplay actions
+static var excluded_types: Array = [
+		Type.IDLE,
+		Type.SELECT_UNIT,
+		Type.SELECT_WISDOM_UPGRADES,
+]
+
+static func is_replayable_type(type: Type):
+	return not (type in Action.excluded_types)
+
 func is_replayable() -> bool:
 	"""Check if this action should be included in replays"""
 
-	# Exclude UI-only actions and other non-gameplay actions
-	var excluded_types: Array = [
-		Type.IDLE,
-		Type.SELECT_UNIT,
-		Type.CHAT,  # Chat commands might be included, but regular chat excluded
-	]
-
 	var action_type: Type = get_type()
-	return not (action_type in excluded_types)
+	return Action.is_replayable_type(action_type)
 
 
 func get_type() -> Type:
