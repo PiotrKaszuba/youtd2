@@ -116,7 +116,8 @@ func start_playback(replay_id: String) -> bool:
 	_recording_start_tick = 0
 
 	# Store original player data for restoration
-	_backup_data()
+	if _should_backup_data(replay_data):
+		_backup_data()
 
 	# Load replay state
 	_playback_actions = replay_data.get("actions", [])
@@ -623,15 +624,32 @@ func _restore_initial_game_state(replay_data: Dictionary):
 	_restore_wisdom_upgrades(initial_state.get("wisdom_upgrades", {}))
 
 
+func _should_backup_data(replay_data: Dictionary):
+	var initial_state: Dictionary = replay_data.get("initial_state", {})
+	var replay_exp_password: String = initial_state.get("exp_password", "")
+	
+	var exp_password: String = Settings.get_setting(Settings.EXP_PASSWORD)
+	
+	if replay_exp_password != exp_password:
+		return true
+	return false
+	
+
 func _backup_data():
 	# This would need to be implemented to save current state before replay
 	# Write exp password to a backup file for that replay
-
+	
+	var exp_password: String = Settings.get_setting(Settings.EXP_PASSWORD)
+	var amount_exp: int = ExperiencePassword.decode(exp_password)
+	
 	var backup_data: Dictionary = {
-		"exp_password": Settings.get_setting(Settings.EXP_PASSWORD),
+		"exp_password": exp_password,
+		"amount_exp": amount_exp,
 	}
 	
-	var backup_file: String = BACKUP_DIR + current_replay_file + ".json"
+	var filename: String = "exp_%d" % amount_exp
+	
+	var backup_file: String = BACKUP_DIR + filename + ".json"
 	var file: FileAccess = FileAccess.open(backup_file, FileAccess.WRITE)
 	if file:
 		file.store_string(JSON.stringify(backup_data))
