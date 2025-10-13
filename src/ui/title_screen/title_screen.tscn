@@ -272,6 +272,7 @@ layout_mode = 1
 [connection signal="pressed" from="UI/TabContainer/MainTab/VBoxContainer/CreditsButton" to="." method="_on_credits_button_pressed"]
 [connection signal="pressed" from="UI/TabContainer/MainTab/VBoxContainer/QuitButton" to="." method="_on_quit_button_pressed"]
 [connection signal="cancel_pressed" from="UI/TabContainer/ConfigureSingleplayerMenu" to="." method="_on_generic_tab_cancel_pressed"]
+[connection signal="load_replay_pressed" from="UI/TabContainer/ConfigureSingleplayerMenu" to="." method="_on_configure_singleplayer_menu_load_replay_pressed"]
 [connection signal="start_button_pressed" from="UI/TabContainer/ConfigureSingleplayerMenu" to="." method="_on_configure_singleplayer_menu_start_button_pressed"]
 [connection signal="cancel_pressed" from="UI/TabContainer/OnlineMatchListMenu" to="." method="_on_generic_tab_cancel_pressed"]
 [connection signal="create_match_pressed" from="UI/TabContainer/OnlineMatchListMenu" to="SetupOnlineGame" method="_on_online_match_list_menu_create_match_pressed"]
