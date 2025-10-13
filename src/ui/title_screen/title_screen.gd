@@ -128,16 +128,9 @@ func _on_configure_singleplayer_menu_load_replay_pressed(replay_id: String):
 	var replay_manager: ReplayManager = get_node("/root/ReplayManager") if get_tree().root.has_node("ReplayManager") else null
 
 	if replay_manager:
+		# start playback already restores appropriate Globals (used below)
 		if replay_manager.start_playback(replay_id):
-			# Start game with replay mode
-			var replay_data: Dictionary = replay_manager._load_replay_file(replay_id)
-
-			Globals._difficulty = replay_data.get("difficulty", Difficulty.enm.EASY)
-			Globals._wave_count = replay_data.get("wave_count", 10)
-			Globals._game_mode = replay_data.get("game_mode", GameMode.enm.RANDOM_WITH_UPGRADES)
-			Globals._origin_seed = replay_data.get("game_seed", 0)
-
-			start_game(PlayerMode.enm.SINGLEPLAYER, Globals._wave_count, Globals._game_mode, Globals._difficulty, TeamMode.enm.ONE_PLAYER_PER_TEAM, Globals._origin_seed, Globals.ConnectionType.ENET)
+			start_game(PlayerMode.enm.SINGLEPLAYER, Globals._wave_count, Globals._game_mode, Globals._difficulty, Globals._team_mode, Globals._origin_seed, Globals.ConnectionType.ENET)
 
 
 func _on_generic_tab_cancel_pressed():
