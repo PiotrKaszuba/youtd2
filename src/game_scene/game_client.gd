@@ -56,7 +56,7 @@ var _checksum_data_map: Dictionary = {}
 @export var _build_space: BuildSpace
 @export var _chat_commands: ChatCommands
 @export var _select_unit: SelectUnit
-@export var _replay_manager: ReplayManager
+@onready var _replay_manager: ReplayManager = get_node("/root/ReplayManager")
 
 
 #########################
@@ -264,7 +264,8 @@ func _do_tick():
 		if time_to_send_checksum:
 			var checksum: PackedByteArray = _calculate_game_state_checksum()
 			_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
-
+	
+	_replay_manager.tick()
 	_update_state()
 	_current_tick += 1
 
