@@ -104,16 +104,6 @@ func _on_cancel_button_pressed():
 	cancel_pressed.emit()
 
 
-func _on_new_game_button_toggled(toggled_on: bool):
-	if toggled_on:
-		_update_mode_display()
-
-
-func _on_load_replay_button_toggled(toggled_on: bool):
-	if toggled_on:
-		_update_mode_display()
-
-
 func _on_replay_file_selector_replay_selected(file_path: String):
 	# Enable start button when replay is selected
 	pass
