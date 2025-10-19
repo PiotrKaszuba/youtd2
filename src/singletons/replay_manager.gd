@@ -406,11 +406,15 @@ func _execute_replay_action(action_data: Dictionary):
 		Action.Type.CHAT: _execute_chat_action(action, player)
 		Action.Type.BUILD_TOWER: _execute_build_tower_action(action, player)
 		Action.Type.UPGRADE_TOWER: _execute_upgrade_tower_action(action, player)
+		Action.Type.TRANSFORM_TOWER: _execute_transform_tower_action(action, player)
 		Action.Type.SELL_TOWER: _execute_sell_tower_action(action, player)
 		Action.Type.SELECT_BUILDER: _execute_select_builder_action(action, player)
+		Action.Type.SELECT_WISDOM_UPGRADES: _execute_select_wisdom_upgrades_action(action, player)
 		Action.Type.TOGGLE_AUTOCAST: _execute_toggle_autocast_action(action, player)
 		Action.Type.CONSUME_ITEM: _execute_consume_item_action(action, player)
+		Action.Type.DROP_ITEM: _execute_drop_item_action(action, player)
 		Action.Type.MOVE_ITEM: _execute_move_item_action(action, player)
+		Action.Type.SWAP_ITEMS: _execute_swap_items_action(action, player)
 		Action.Type.AUTOFILL: _execute_autofill_action(action, player)
 		Action.Type.TRANSMUTE: _execute_transmute_action(action, player)
 		Action.Type.RESEARCH_ELEMENT: _execute_research_element_action(action, player)
@@ -419,7 +423,7 @@ func _execute_replay_action(action_data: Dictionary):
 		Action.Type.AUTOCAST: _execute_autocast_action(action, player)
 		Action.Type.FOCUS_TARGET: _execute_focus_target_action(action, player)
 		Action.Type.CHANGE_BUFFGROUP: _execute_change_buffgroup_action(action, player)
-		Action.Type.SELECT_WISDOM_UPGRADES: _execute_select_wisdom_upgrades_action(action, player)
+		Action.Type.SELECT_UNIT: _execute_select_unit_action(action, player)
 		Action.Type.SORT_ITEM_STASH: _execute_sort_item_stash_action(action, player)
 
 
@@ -445,6 +449,10 @@ func _execute_upgrade_tower_action(action: Dictionary, player: Player):
 		ActionUpgradeTower.execute(action, player, select_unit)
 
 
+func _execute_transform_tower_action(action: Dictionary, player: Player):
+	ActionTransformTower.execute(action, player)
+
+
 func _execute_sell_tower_action(action: Dictionary, player: Player):
 	var build_space: BuildSpace = _get_build_space()
 
@@ -464,8 +472,16 @@ func _execute_consume_item_action(action: Dictionary, player: Player):
 	ActionConsumeItem.execute(action, player)
 
 
+func _execute_drop_item_action(action: Dictionary, player: Player):
+	ActionDropItem.execute(action, player)
+
+
 func _execute_move_item_action(action: Dictionary, player: Player):
 	ActionMoveItem.execute(action, player)
+
+
+func _execute_swap_items_action(action: Dictionary, player: Player):
+	ActionSwapItems.execute(action, player)
 
 
 func _execute_autofill_action(action: Dictionary, player: Player):
@@ -498,6 +514,10 @@ func _execute_focus_target_action(action: Dictionary, player: Player):
 
 func _execute_change_buffgroup_action(action: Dictionary, player: Player):
 	ActionChangeBuffgroup.execute(action, player)
+
+
+func _execute_select_unit_action(action: Dictionary, player: Player):
+	ActionSelectUnit.execute(action, player)
 
 
 func _execute_select_wisdom_upgrades_action(action: Dictionary, player: Player):
