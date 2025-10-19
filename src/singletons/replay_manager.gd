@@ -33,6 +33,7 @@ var _game_client: GameClient
 var _recorded_actions: Array = []  # Store actions in memory for binary serialization
 var _recording_start_tick: int = 0
 var _last_checksum_tick: int = 0
+var _initial_game_state: Dictionary = {}
 
 # Playback state
 var _playback_actions: Array = []
@@ -78,12 +79,10 @@ func start_recording() -> bool:
 	_restore_original_state()
 
 	current_mode = ReplayMode.RECORDING
-	_recording_start_tick = 0
+	_initial_game_state = _get_initial_game_state()
 
 	# Generate unique replay ID
 	current_replay_file = _generate_replay_id()
-	_recorded_actions.clear()  # Clear any previous recorded actions
-	_last_checksum_tick = 0
 
 	replay_mode_changed.emit(current_mode)
 	return true
@@ -113,15 +112,12 @@ func start_playback(replay_id: String) -> bool:
 	if replay_data.is_empty():
 		return false
 	
-	_recording_start_tick = 0
-
 	# Store original player data for restoration
 	if _should_backup_data(replay_data):
 		_backup_data()
 
 	# Load replay state
 	_playback_actions = replay_data.get("actions", [])
-	_playback_tick = 0
 
 	current_mode = ReplayMode.PLAYBACK
 	playback_state = PlaybackState.PLAYING
@@ -746,7 +742,7 @@ func _save_replay_metadata() -> void:
 		"detailed_checksums": _detailed_checksums_enabled,
 		"recording_end_tick": _get_current_tick(),
 		"duration_ticks": _get_current_tick() - _recording_start_tick,
-		"initial_state": _get_initial_game_state(),
+		"initial_state": _initial_game_state,
 	}
 
 	var metadata_file: String = REPLAY_DIR + current_replay_file + ".json"
