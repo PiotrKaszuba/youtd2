@@ -79,7 +79,8 @@ func serialize() -> Dictionary:
 	return _data
 
 
-# Exclude UI-only actions and other non-gameplay actions
+# Exclude actions that do not affect gameplay
+# or are specifically excluded due to specific interactions
 static var excluded_types: Array = [
 		Type.IDLE,
 		Type.SELECT_UNIT,
