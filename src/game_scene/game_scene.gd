@@ -41,7 +41,9 @@ func _ready():
 	Globals.reset()
 	PlayerManager.reset()
 	GroupManager.reset()
-
+	
+	_replay_manager.start_recording()
+	
 #	Replace small map with big map if playing in multiplayer
 #	NOTE: need to swap instead of using big map for both
 #	cases because big map makes the framerate worse,
@@ -145,8 +147,6 @@ func _ready():
 	_check_nodes_mapped_to_players()
 
 	_camera.position = _get_camera_origin_pos()
-	
-	_replay_manager.start_recording()
 	
 #	NOTE: when game initially starts, we need to wait a bit for client-host connection to be established. Until that point, show shadows to block input and indicate that input is not possible.
 	_builder_menu.show()
