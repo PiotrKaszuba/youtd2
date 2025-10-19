@@ -613,7 +613,9 @@ func _on_player_requested_start_game():
 
 		return
 
-	var action: Action = ActionChat.make(ChatCommands.READY[0])
+	# selected unit uid can be ignored for ready command
+	var selected_unit_id: int = -1
+	var action: Action = ActionChat.make(ChatCommands.READY[0], selected_unit_id)
 	_game_client.add_action(action)
 
 
