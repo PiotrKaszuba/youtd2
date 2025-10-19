@@ -467,8 +467,12 @@ func _finish_editing_chat():
 func _submit_chat_message():
 	var chat_message: String = _hud.get_chat_edit_text()
 	_finish_editing_chat()
+	
+	var player: Player = PlayerManager.get_local_player()
+	var unit: Unit = player.get_selected_unit()
+	var selected_unit_uid: int = unit.get_uid()
 
-	var chat_action: Action = ActionChat.make(chat_message)
+	var chat_action: Action = ActionChat.make(chat_message, selected_unit_uid)
 	_game_client.add_action(chat_action)
 
 
