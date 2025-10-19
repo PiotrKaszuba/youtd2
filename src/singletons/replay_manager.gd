@@ -430,7 +430,16 @@ func _execute_replay_action(action_data: Dictionary):
 func _execute_chat_action(action: Dictionary, player: Player):
 	var chat_commands: ChatCommands = _get_chat_commands()
 	var hud: HUD = _get_hud()
-
+	
+	# code below allows to recreate selected unit for chat commands
+	# such as autooil
+	# just as the chat action is executed
+	# without fully tracking selected units otherwise
+	# nor requiring selected unit consistency for replays
+	var selected_unit_uid: int = action[Action.Field.UID]
+	var action_select_unit: Action = ActionSelectUnit.make(selected_unit_uid)
+	ActionSelectUnit.execute(action_select_unit.serialize(), player)
+	
 	if chat_commands and hud:
 		ActionChat.execute(action, player, hud, chat_commands)
 
