@@ -186,89 +186,12 @@ class RecipeDatabase:
 
 
 #########################
-###   Named Item IDs  ###
+###   Constants       ###
 #########################
 
 
-# Commonly referenced item IDs for convenience in analyses.
-ENCHANTED_MINING_PICK: int = 8
-
-
-#########################
-###   Core Helpers    ###
-#########################
-
-
-@dataclass(frozen=True)
-class IngredientSummary:
-	"""
-	Summary of how a concrete set of ingredients relates to a recipe.
-
-	This is intentionally lightweight and focuses on counts and average level
-	of permanent items, matching the parts of Horadric cube logic that are
-	relevant for result generation.
-	"""
-
-	permanent_count_explicit: int
-	usable_count_explicit: int
-	permanent_count_required: int
-	usable_count_required: int
-	avg_permanent_level: int
-
-	@property
-	def has_enough_permanents(self) -> bool:
-		return self.permanent_count_explicit <= self.permanent_count_required
-
-	@property
-	def has_enough_usables(self) -> bool:
-		return self.usable_count_explicit <= self.usable_count_required
-
-
-def summarize_ingredients_for_recipe(
-	recipe: Recipe,
-	item_db: ItemDatabase,
-	ingredient_rarity: int,
-	explicit_item_ids: Sequence[int],
-	aggregate_permanent_levels: Optional[int] = None,
-) -> IngredientSummary:
-	"""
-	High-level helper that:
-
-	- Counts explicit permanent and usable items.
-	- Computes average permanent level using both explicit items and an
-	  optional aggregate sum of levels for unspecified permanent items.
-	- Uses the recipe's permanent_count to normalize the average.
-
-	Note: rarity is accepted for symmetry with Godot but not validated here;
-	it is expected that the caller only passes items that already satisfy
-	the recipe's rarity constraints.
-	"""
-	permanent_ids: List[int] = []
-	usable_ids: List[int] = []
-
-	for item_id in explicit_item_ids:
-		item = item_db.items.get(int(item_id))
-		if item is None:
-			continue
-		if item.is_permanent:
-			permanent_ids.append(item_id)
-		elif item.is_usable:
-			usable_ids.append(item_id)
-
-	avg_level = compute_avg_permanent_level(
-		recipe=recipe,
-		item_db=item_db,
-		explicit_item_ids=permanent_ids,
-		aggregate_permanent_levels=aggregate_permanent_levels,
-	)
-
-	return IngredientSummary(
-		permanent_count_explicit=len(permanent_ids),
-		usable_count_explicit=len(usable_ids),
-		permanent_count_required=recipe.permanent_count,
-		usable_count_required=recipe.usable_count,
-		avg_permanent_level=avg_level,
-	)
+# Maximum level bound for PRECIPITATE recipe (level-agnostic)
+MAX_LEVEL_BOUND: int = 100000
 
 
 def compute_avg_permanent_level(
@@ -318,9 +241,9 @@ def compute_level_bounds_for_recipe(
 	Compute lvl_min and lvl_max used for item pool selection.
 	Matches HoradricCube.get_result_item_for_recipe logic, including PRECIPITATE.
 	"""
-	if recipe.id == 6:
+	if recipe.id == RECIPE_PRECIPITATE:
 		# PRECIPITATE – completely level agnostic
-		return 0, 100000
+		return 0, MAX_LEVEL_BOUND
 
 	lvl_min = avg_permanent_level + recipe.lvl_bonus_min + random_bonus_mod
 	lvl_max = avg_permanent_level + recipe.lvl_bonus_max + random_bonus_mod
@@ -337,35 +260,68 @@ def get_permanent_item_pool_bounded(
 	rarity: int,
 	lvl_min: int,
 	lvl_max: int,
+	exclude_item_ids: Optional[Sequence[int]] = None,
+	with_fallback: bool = False,
 ) -> List[int]:
 	"""
 	Python mirror of ItemDropCalc.get_item_list_bounded.
 	Returns IDs of regular items with the given rarity and level bounds.
+
+	By default (with_fallback=False), this behaves like ItemDropCalc.get_item_list_bounded:
+	it simply filters by rarity and level bounds and returns all matching item IDs.
+
+	If with_fallback=True and the pool is empty, this applies the additional HoradricCube
+	behavior from _get_transmuted_item: it lowers lvl_min by 10 repeatedly (up to 10
+	times) until the pool becomes non-empty or gives up.
 	"""
-	pool: List[int] = []
-	for item in item_db.items.values():
-		if not item.is_permanent:
-			continue
-		if item.rarity != rarity:
-			continue
-		level = item.required_wave_level
-		if lvl_min <= level <= lvl_max:
-			pool.append(item.id)
-	return pool
+	if exclude_item_ids is None:
+		exclude_item_ids = []
+	exclude_set = {int(x) for x in exclude_item_ids}
+	
+	current_lvl_min = lvl_min
+	loop_count = 0
+	
+	while True:
+		pool: List[int] = []
+		for item in item_db.items.values():
+			if not item.is_permanent:
+				continue
+			if item.rarity != rarity:
+				continue
+			if item.id in exclude_set:
+				continue
+			level = item.required_wave_level
+			if current_lvl_min <= level <= lvl_max:
+				pool.append(item.id)
+		
+		if pool or not with_fallback:
+			return pool
+		
+		current_lvl_min -= 10
+		loop_count += 1
+		if loop_count > 10:
+			return []
 
 
 def get_oil_and_consumable_pool(
 	item_db: ItemDatabase,
 	rarity: int,
+	exclude_item_ids: Optional[Sequence[int]] = None,
 ) -> List[int]:
 	"""
 	Python mirror of ItemDropCalc.get_oil_and_consumables_list.
 	"""
+	if exclude_item_ids is None:
+		exclude_item_ids = []
+	exclude_set = {int(x) for x in exclude_item_ids}
+	
 	pool: List[int] = []
 	for item in item_db.items.values():
 		if not item.is_usable:
 			continue
 		if item.rarity != rarity:
+			continue
+		if item.id in exclude_set:
 			continue
 		pool.append(item.id)
 	return pool
@@ -404,6 +360,15 @@ class DecisionNode:
 		"""
 		index = int(rng.choice(len(self.outcomes), p=self.probabilities))
 		return self.outcomes[index]
+	
+	def roll_to_item(self, rng: np.random.Generator) -> int:
+		"""
+		Recursively roll until an item ID (int) is reached.
+		"""
+		outcome = self.roll(rng)
+		if isinstance(outcome, DecisionNode):
+			return outcome.roll_to_item(rng)
+		return int(outcome)
 
 
 def collapse_to_item_distribution(node: DecisionNode) -> Dict[int, float]:
@@ -494,21 +459,24 @@ def build_single_result_decision_tree(
 		)
 
 		if recipe.result_item_type == ResultItemType.USABLE:
-			candidate_pool = get_oil_and_consumable_pool(item_db, result_rarity)
+			candidate_pool = get_oil_and_consumable_pool(
+				item_db, result_rarity, exclude_item_ids=explicit_ingredient_ids
+			)
 		elif recipe.result_item_type == ResultItemType.PERMANENT:
 			candidate_pool = get_permanent_item_pool_bounded(
 				item_db=item_db,
 				rarity=result_rarity,
 				lvl_min=lvl_min,
 				lvl_max=lvl_max,
+				exclude_item_ids=explicit_ingredient_ids,
+				with_fallback=True,
 			)
 		else:
 			candidate_pool = []
 
-		candidate_pool = [item_id for item_id in candidate_pool if item_id not in explicit_set]
-
 		if not candidate_pool:
 			# No available items – represent as a degenerate node pointing to 0.
+			# Note: 0 is used as sentinel value for empty pool (matches Godot behavior).
 			child = build_item_choice_node([0], name="item_choice_empty")
 		else:
 			child = build_item_choice_node(candidate_pool, name="item_choice")
@@ -550,10 +518,7 @@ def roll_single_result(
 		explicit_ingredient_ids=explicit_ingredient_ids,
 	)
 
-	outcome = tree.roll(rng)
-	if isinstance(outcome, DecisionNode):
-		outcome = outcome.roll(rng)
-	return int(outcome)
+	return tree.roll_to_item(rng)
 
 
 def get_single_result_distribution(
@@ -566,6 +531,9 @@ def get_single_result_distribution(
 	"""
 	Enumerate all luck outcomes and item choices to get a full probability
 	distribution over result item IDs for a *single* result slot.
+
+	Note: item ID 0 (if present) represents an empty pool / failure case, matching
+	Godot's use of 0 as the sentinel "no item" value.
 	"""
 	tree = build_single_result_decision_tree(
 		recipe=recipe,
@@ -577,18 +545,11 @@ def get_single_result_distribution(
 	return collapse_to_item_distribution(tree)
 
 
-def compute_result_rarity(ingredient_rarity: int, recipe: Recipe) -> int:
-	"""
-	Compute result rarity from ingredient rarity and recipe's rarity_change.
-	"""
-	return ingredient_rarity + recipe.rarity_change
-
 
 def find_best_avg_level_for_item(
 	target_item_id: int,
 	recipe: Recipe,
 	item_db: ItemDatabase,
-	ingredient_rarity: int,
 	avg_level_range: Iterable[int],
 	explicit_ingredient_ids: Optional[Sequence[int]] = None,
 ) -> Tuple[Optional[int], Dict[int, float]]:
@@ -597,14 +558,19 @@ def find_best_avg_level_for_item(
 	probability of obtaining target_item_id is maximal for a single result
 	slot of the given recipe.
 
-	- ingredient_rarity: rarity shared by ingredients (as in Horadric cube).
 	- explicit_ingredient_ids: items to be treated as ingredients and removed
 	  from result pools; does not affect the average directly here.
+
 	"""
 	if explicit_ingredient_ids is None:
 		explicit_ingredient_ids = []
 
-	result_rarity = compute_result_rarity(ingredient_rarity, recipe)
+	target_item = item_db.items.get(int(target_item_id))
+	if target_item is None:
+		raise ValueError(f"Unknown target item id: {target_item_id}")
+	
+	# result rarity is the same as the target item rarity
+	result_rarity = target_item.rarity
 
 	prob_by_level: Dict[int, float] = {}
 	best_level: Optional[int] = None
@@ -628,12 +594,39 @@ def find_best_avg_level_for_item(
 
 
 #########################
+###   Recipe IDs      ###
+#########################
+
+
+# Recipe IDs matching recipe_properties.csv and HoradricCube.Recipe enum.
+RECIPE_NONE: int = 0
+RECIPE_REBREW: int = 1
+RECIPE_DISTILL: int = 2
+RECIPE_REASSEMBLE: int = 3
+RECIPE_PERFECT: int = 4
+RECIPE_LIQUEFY: int = 5
+RECIPE_PRECIPITATE: int = 6
+RECIPE_IMBUE: int = 7
+
+
+#########################
+###   Named Item IDs  ###
+#########################
+
+
+# Commonly referenced item IDs for convenience in analyses.
+ENCHANTED_MINING_PICK: int = 8
+HAUNTED_HAND: int = 246
+STRANGE_ITEM: int = 233
+
+
+#########################
 ###      CLI Demo     ###
 #########################
 
 
 def _load_default_databases() -> Tuple[ItemDatabase, RecipeDatabase]:
-	root = Path(__file__).resolve().parent
+	root = Path(__file__).resolve().parent.parent
 	item_db = ItemDatabase.from_csv(root / "data" / "item_properties.csv")
 	recipe_db = RecipeDatabase.from_csv(root / "data" / "recipe_properties.csv")
 	return item_db, recipe_db
@@ -642,21 +635,29 @@ def _load_default_databases() -> Tuple[ItemDatabase, RecipeDatabase]:
 def main() -> None:
 	item_db, recipe_db = _load_default_databases()
 
-	recipe_reassemble = recipe_db.recipes[3]
-	ingredient_rarity = Rarity.UNCOMMON
+	##
+	item = STRANGE_ITEM
+	recipe = RECIPE_PERFECT
+	level_range = range(0, 120)
+	##
 
 	best_level, curve = find_best_avg_level_for_item(
-		target_item_id=ENCHANTED_MINING_PICK,
-		recipe=recipe_reassemble,
+		target_item_id=item,
+		recipe=recipe_db.recipes[recipe],
 		item_db=item_db,
-		ingredient_rarity=ingredient_rarity,
-		avg_level_range=range(0, 120),
+		avg_level_range=level_range,
 		explicit_ingredient_ids=[],
 	)
 
-	print(f"Best avg ingredient level for item {ENCHANTED_MINING_PICK}: {best_level}")
+	print(f"Best avg ingredient level for item {item}: {best_level}")
 	if best_level is not None:
-		print(f"Probability at best level: {curve[best_level]:.6f}")
+		print(f"Probability at best level: {curve[best_level]*100:.2f}%")
+
+	# print the curve
+	print(f"Probabilities by level:")
+	print(f"Level\tProbability")
+	for level, prob in curve.items():
+		print(f"Level {level}: {prob*100:.2f}%")
 
 
 if __name__ == "__main__":
