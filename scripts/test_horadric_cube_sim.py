@@ -1,38 +1,27 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
-import numpy as np
-
-from horadric_cube_sim import (
-	ENCHANTED_MINING_PICK,
-	ItemDatabase,
-	Rarity,
-	RECIPE_REASSEMBLE,
-	RecipeDatabase,
+from horadric_cube.constants import ENCHANTED_MINING_PICK, RECIPE_REASSEMBLE
+from horadric_cube.db import load_default_databases
+from horadric_cube.models import Rarity
+from horadric_cube.levels_and_pools import get_permanent_item_pool_bounded
+from horadric_cube.results import (
 	find_best_avg_level_for_item,
-	get_permanent_item_pool_bounded,
 	get_single_result_distribution,
 )
 
 
-def _load_dbs():
-	root = Path(__file__).resolve().parent.parent
-	item_db = ItemDatabase.from_csv(root / "data" / "item_properties.csv")
-	recipe_db = RecipeDatabase.from_csv(root / "data" / "recipe_properties.csv")
-	return item_db, recipe_db
-
 
 def test_item_and_recipe_loading():
-	item_db, recipe_db = _load_dbs()
+	item_db, recipe_db = load_default_databases()
 
 	assert ENCHANTED_MINING_PICK in item_db.items
 	assert RECIPE_REASSEMBLE in recipe_db.recipes  # Reassemble
 
 
 def test_permanent_pool_contains_pick():
-	item_db, _ = _load_dbs()
+	item_db, _ = load_default_databases()
 
 	pool = get_permanent_item_pool_bounded(
 		item_db=item_db,
@@ -45,7 +34,7 @@ def test_permanent_pool_contains_pick():
 
 
 def test_distribution_sums_to_one():
-	item_db, recipe_db = _load_dbs()
+	item_db, recipe_db = load_default_databases()
 	recipe = recipe_db.recipes[RECIPE_REASSEMBLE]  # Reassemble
 
 	dist = get_single_result_distribution(
@@ -61,14 +50,14 @@ def test_distribution_sums_to_one():
 
 
 def test_main_scenario_best_level_and_prob():
-	item_db, recipe_db = _load_dbs()
+	item_db, recipe_db = load_default_databases()
 	recipe = recipe_db.recipes[RECIPE_REASSEMBLE]  # Reassemble
 
-	best_level, curve = find_best_avg_level_for_item(
+	best_level, curve, _ = find_best_avg_level_for_item(
 		target_item_id=ENCHANTED_MINING_PICK,
 		recipe=recipe,
 		item_db=item_db,
-		avg_level_range=range(0, 120),
+		avg_level_range=range(0, 100),
 		explicit_ingredient_ids=[],
 	)
 
