@@ -53,6 +53,7 @@ var _last_received_timeslot_list: Array = []
 @export var _build_space: BuildSpace
 @export var _chat_commands: ChatCommands
 @export var _select_unit: SelectUnit
+@onready var _replay_manager: ReplayManager = get_node("/root/ReplayManager")
 
 
 #########################
@@ -230,7 +231,8 @@ func _do_tick():
 		if time_to_send_checksum:
 			var checksum: PackedByteArray = _calculate_game_state_checksum()
 			_game_host.receive_timeslot_checksum.rpc_id(1, _current_tick, checksum)
-
+	
+	_replay_manager.tick()
 	_update_state()
 	_current_tick += 1
 
@@ -277,10 +279,16 @@ func _execute_action(action: Dictionary):
 
 	if player == null:
 		push_error("player is null")
-		
+
 		return
 
 	var action_type: Action.Type = action[Action.Field.TYPE]
+
+	# Log action for replay if in recording mode and action is replayable
+	if _replay_manager and _replay_manager.is_recording():
+		var action_obj: Action = Action.new(action)
+		if action_obj.is_replayable():
+			_replay_manager._record_action(action)
 
 	match action_type:
 		Action.Type.IDLE: return

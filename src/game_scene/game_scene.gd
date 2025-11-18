@@ -25,6 +25,7 @@ class_name GameScene extends Node
 @export var _tutorial_controller: TutorialController
 @export var _builder_menu: BuilderMenu
 @export var _range_checker: TowerPreview
+@onready var _replay_manager: ReplayManager = get_node("/root/ReplayManager")
 
 var _ui_input_is_enabled: bool = false
 var _map: Map = null
@@ -40,7 +41,9 @@ func _ready():
 	Globals.reset()
 	PlayerManager.reset()
 	GroupManager.reset()
-
+	
+	_replay_manager.start_recording()
+	
 #	Replace small map with big map if playing in multiplayer
 #	NOTE: need to swap instead of using big map for both
 #	cases because big map makes the framerate worse,
@@ -69,7 +72,12 @@ func _ready():
 	
 	EventBus.player_requested_help.connect(_on_player_requested_help)
 	EventBus.player_requested_quit_to_title.connect(_on_player_requested_quit_to_title)
+	_game_menu.save_replay_pressed.connect(_on_game_menu_save_replay)
 	EventBus.player_selected_builder.connect(_on_player_selected_builder)
+
+	if _replay_manager:
+		_replay_manager.replay_mode_changed.connect(_on_replay_mode_changed)
+		_replay_manager.playback_state_changed.connect(_on_replay_playback_state_changed)
 	EventBus.player_requested_start_game.connect(_on_player_requested_start_game)
 	EventBus.player_requested_next_wave.connect(_on_player_requested_next_wave)
 	EventBus.player_requested_to_roll_towers.connect(_on_player_requested_to_roll_towers)
@@ -459,8 +467,12 @@ func _finish_editing_chat():
 func _submit_chat_message():
 	var chat_message: String = _hud.get_chat_edit_text()
 	_finish_editing_chat()
+	
+	var player: Player = PlayerManager.get_local_player()
+	var unit: Unit = player.get_selected_unit()
+	var selected_unit_uid: int = unit.get_uid()
 
-	var chat_action: Action = ActionChat.make(chat_message)
+	var chat_action: Action = ActionChat.make(chat_message, selected_unit_uid)
 	_game_client.add_action(chat_action)
 
 
@@ -601,7 +613,9 @@ func _on_player_requested_start_game():
 
 		return
 
-	var action: Action = ActionChat.make(ChatCommands.READY[0])
+	# selected unit uid can be ignored for ready command
+	var selected_unit_id: int = -1
+	var action: Action = ActionChat.make(ChatCommands.READY[0], selected_unit_id)
 	_game_client.add_action(action)
 
 
@@ -879,6 +893,52 @@ func _on_game_menu_quit_pressed():
 	_quit_to_title()
 
 
+func _on_game_menu_save_replay():
+	if _replay_manager:
+		var replay_path: String = _replay_manager.save_replay_from_current_game()
+		if !replay_path.is_empty():
+			Messages.add_normal(PlayerManager.get_local_player(), "Replay saved to: " + replay_path)
+
+
+func _on_replay_mode_changed(mode: ReplayManager.ReplayMode):
+	_update_ui_for_replay_mode(mode)
+
+
+func _on_replay_playback_state_changed(state: ReplayManager.PlaybackState):
+	_update_ui_for_playback_state(state)
+
+
+func _update_ui_for_replay_mode(mode: ReplayManager.ReplayMode):
+	# Update UI elements based on replay mode
+	match mode:
+		ReplayManager.ReplayMode.NONE:
+			# Normal gameplay mode
+			_set_ui_input_enabled(true)
+		ReplayManager.ReplayMode.RECORDING:
+			# Recording mode - disable certain UI elements
+			pass
+		ReplayManager.ReplayMode.PLAYBACK:
+			# Playback mode - lock player actions
+			_set_ui_input_enabled(false)
+
+
+func _update_ui_for_playback_state(state: ReplayManager.PlaybackState):
+	match state:
+		ReplayManager.PlaybackState.PLAYING:
+			# Hide pause menu when playing
+			if _game_menu.visible:
+				_toggle_game_menu()
+		ReplayManager.PlaybackState.PAUSED:
+			# Show pause menu when paused
+			if not _game_menu.visible:
+				_toggle_game_menu()
+		ReplayManager.PlaybackState.FINISHED:
+			# Show pause menu when finished and allow continuing
+			if not _game_menu.visible:
+				_toggle_game_menu()
+			_set_ui_input_enabled(true)
+
+
 func _on_player_requested_quit_to_title():
 	_quit_to_title()
 
@@ -891,6 +951,7 @@ func _quit_to_title():
 #	NOTE: need to use load() here instead of preload()
 #	because preload() causes an error here since Godot
 #	4.1->4.3 migration, for unknown reason.
+	_replay_manager._restore_original_state()
 	var title_screen_scene: PackedScene = load("res://src/ui/title_screen/title_screen.tscn")
 	get_tree().change_scene_to_packed(title_screen_scene)
 

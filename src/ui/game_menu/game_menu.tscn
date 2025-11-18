@@ -50,6 +50,11 @@ layout_mode = 2
 focus_mode = 0
 text = "SETTINGS_BUTTON"
 
+[node name="SaveReplayButton" type="Button" parent="TabContainer/MainTab/VBoxContainer"]
+layout_mode = 2
+focus_mode = 0
+text = "SAVE_REPLAY_BUTTON"
+
 [node name="QuitButton" type="Button" parent="TabContainer/MainTab/VBoxContainer"]
 layout_mode = 2
 focus_mode = 0
@@ -75,6 +80,7 @@ metadata/_tab_index = 3
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/HelpButton" to="." method="_on_help_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/EncyclopediaButton" to="." method="_on_encyclopedia_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/SettingsButton" to="." method="_on_settings_button_pressed"]
+[connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/SaveReplayButton" to="." method="_on_save_replay_button_pressed"]
 [connection signal="pressed" from="TabContainer/MainTab/VBoxContainer/QuitButton" to="." method="_on_quit_button_pressed"]
 [connection signal="closed" from="TabContainer/HintsMenu" to="." method="_on_help_menu_closed"]
 [connection signal="close_pressed" from="TabContainer/EncyclopediaMenu" to="." method="_on_encyclopedia_menu_close_pressed"]
