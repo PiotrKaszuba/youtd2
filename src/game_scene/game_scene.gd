@@ -81,6 +81,7 @@ func _ready():
 	EventBus.player_requested_transmute.connect(_on_player_requested_transmute)
 	EventBus.player_requested_return_from_horadric_cube.connect(_on_player_requested_return_from_horadric_cube)
 	EventBus.player_requested_autofill.connect(_on_player_requested_autofill)
+	EventBus.player_requested_specific_autofill.connect(_on_player_requested_specific_autofill)
 	EventBus.player_right_clicked_autocast.connect(_on_player_right_clicked_autocast)
 	EventBus.player_right_clicked_item.connect(_on_player_right_clicked_item)
 	EventBus.player_shift_right_clicked_item.connect(_on_player_shift_right_clicked_item)
@@ -743,6 +744,14 @@ func _on_player_requested_autofill(recipe: HoradricCube.Recipe, rarity_filter: A
 		autofill_uid_list.append(item_uid)
 
 	var action: Action = ActionAutofill.make(autofill_uid_list)
+	_game_client.add_action(action)
+
+
+func _on_player_requested_specific_autofill(item_uid_list: Array[int]):
+	var random_pitch: float = Globals.local_rng.randf_range(1.0, 1.1)
+	SFX.play_sfx(SfxPaths.PICKUP_ITEM, 0.0, random_pitch)
+
+	var action: Action = ActionAutofill.make(item_uid_list)
 	_game_client.add_action(action)
 
 
