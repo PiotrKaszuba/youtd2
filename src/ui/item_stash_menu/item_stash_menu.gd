@@ -9,6 +9,11 @@ class_name ItemStashMenu extends PanelContainer
 const MIN_ROW_COUNT: int = 6
 const COLUMN_COUNT: int = 6
 
+enum SmartAskState {
+	IDLE,
+	WAITING,
+	RESULTS
+}
 
 # This UI element displays items which are currently in the
 # item stash.
@@ -21,9 +26,23 @@ const COLUMN_COUNT: int = 6
 @export var _backpacker_recipes: GridContainer
 @export var _horadric_item_container_panel: ItemContainerPanel
 @export var _transmute_button: Button
+@export var _optimizer_button: Button
 
 @export var _horadric_cube_avg_item_level_label: Label
 @export var _lock_filter_button: Button
+
+@export var _suggestions_container: VBoxContainer
+@export var _suggestions_scroll_container: ScrollContainer
+@export var _http_request: HTTPRequest
+@export var _request_timer: Timer
+
+var _smart_ask_state: SmartAskState = SmartAskState.IDLE
+var _current_request_id: int = 0
+# Icon resources
+var _icon_ask: Texture2D = preload("res://assets/hud/misc3.png") # Atlas placeholder
+var _icon_cancel: Texture2D = preload("res://assets/hud/hud_atlas.png") # Atlas placeholder
+var _atlas_icon_ask: AtlasTexture
+var _atlas_icon_cancel: AtlasTexture
 
 #########################
 ### Code starts here  ###
@@ -31,6 +50,17 @@ const COLUMN_COUNT: int = 6
 
 # NOTE: the background buttons are also added while the scene is open in editor, to check how it looks visually.
 func _ready():
+	# Setup atlas textures for icons
+	_atlas_icon_ask = AtlasTexture.new()
+	_atlas_icon_ask.atlas = _icon_ask
+	_atlas_icon_ask.region = Rect2(640, 0, 128, 128) # Original ask icon
+	
+	_atlas_icon_cancel = AtlasTexture.new()
+	_atlas_icon_cancel.atlas = _icon_cancel
+	_atlas_icon_cancel.region = Rect2(10, 11, 110, 109) # Lock filter icon style (cross/close)
+
+	_update_optimizer_button_state()
+
 	var min_slot_count: int = MIN_ROW_COUNT * COLUMN_COUNT
 	
 	for i in range(0, min_slot_count):
@@ -203,6 +233,26 @@ func _set_horadric_cube_average_level():
 	_horadric_cube_avg_item_level_label.text = text
 	
 
+func _update_optimizer_button_state():
+	match _smart_ask_state:
+		SmartAskState.IDLE:
+			_optimizer_button.icon = _atlas_icon_ask
+			_optimizer_button.tooltip_text = "Ask for smart transmutation recipes"
+			_suggestions_scroll_container.hide()
+		SmartAskState.WAITING:
+			_optimizer_button.icon = _atlas_icon_cancel
+			_optimizer_button.tooltip_text = "Cancel request"
+		SmartAskState.RESULTS:
+			_optimizer_button.icon = _atlas_icon_cancel
+			_optimizer_button.tooltip_text = "Clear suggestions"
+			_suggestions_scroll_container.show()
+
+
+func _clear_suggestions():
+	for child in _suggestions_container.get_children():
+		child.queue_free()
+
+
 #########################
 ###     Callbacks     ###
 #########################
@@ -360,3 +410,132 @@ func _on_sort_button_pressed():
 func _on_lock_filter_button_toggled(_toggled_on: bool):
 	_load_current_filter()
 	_update_autofill_buttons()
+
+
+func _on_optimizer_button_pressed():
+	match _smart_ask_state:
+		SmartAskState.IDLE:
+			_start_optimization_request()
+		SmartAskState.WAITING:
+			_cancel_request()
+		SmartAskState.RESULTS:
+			_clear_suggestions()
+			_smart_ask_state = SmartAskState.IDLE
+			_update_optimizer_button_state()
+
+
+func _start_optimization_request():
+	var local_player: Player = PlayerManager.get_local_player()
+	
+	# 1. Transmute Inventory: Item Stash + Horadric Cube (send both ID and UID)
+	var transmute_inventory_items: Array[Dictionary] = []
+	for item in local_player.get_item_stash().get_item_list():
+		transmute_inventory_items.append({"id": item.get_id(), "uid": item.get_uid()})
+	for item in local_player.get_horadric_stash().get_item_list():
+		transmute_inventory_items.append({"id": item.get_id(), "uid": item.get_uid()})
+	
+	# 2. Tower Inventory: All towers owned by player
+	var tower_inventory_ids: Array[int] = []
+	var towers: Array[Tower] = Utils.get_tower_list()
+	for tower in towers:
+		if tower.get_player() == local_player:
+			for item in tower.get_item_container().get_item_list():
+				tower_inventory_ids.append(item.get_id())
+	
+	var current_level: int = local_player.get_team().get_level()
+	
+	# Increment request ID
+	_current_request_id += 1
+	
+	var body: Dictionary = {
+		"request_id": _current_request_id,
+		"transmute_inventory_items": transmute_inventory_items,
+		"tower_inventory": tower_inventory_ids,
+		"level": current_level
+	}
+	
+	var json_body: String = JSON.stringify(body)
+	var headers: PackedStringArray = ["Content-Type: application/json"]
+	_http_request.request("http://localhost:8000/optimize", headers, HTTPClient.METHOD_POST, json_body)
+	
+	_smart_ask_state = SmartAskState.WAITING
+	_update_optimizer_button_state()
+	_request_timer.start()
+
+
+func _cancel_request():
+	_http_request.cancel_request()
+	_smart_ask_state = SmartAskState.IDLE
+	_update_optimizer_button_state()
+	_request_timer.stop()
+
+
+func _on_request_timer_timeout():
+	if _smart_ask_state == SmartAskState.WAITING:
+		_cancel_request()
+		Utils.add_ui_error(PlayerManager.get_local_player(), "Smart ask timed out")
+
+
+func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray):
+	# Ignore if we are not waiting (e.g. cancelled)
+	if _smart_ask_state != SmartAskState.WAITING:
+		return
+	
+	_request_timer.stop()
+	
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		_smart_ask_state = SmartAskState.IDLE
+		_update_optimizer_button_state()
+		Utils.add_ui_error(PlayerManager.get_local_player(), "Smart ask failed")
+		return
+	
+	var json = JSON.parse_string(body.get_string_from_utf8())
+	if json == null or not json.has("recipes") or not json.has("request_id"):
+		_smart_ask_state = SmartAskState.IDLE
+		_update_optimizer_button_state()
+		Utils.add_ui_error(PlayerManager.get_local_player(), "Invalid response from server")
+		return
+	
+	var received_id: int = int(json["request_id"])
+	if received_id != _current_request_id:
+		# Stale response from a previous request, ignore it
+		return
+	
+	_populate_suggestions(json["recipes"])
+	_smart_ask_state = SmartAskState.RESULTS
+	_update_optimizer_button_state()
+
+
+func _populate_suggestions(recipes: Array):
+	_clear_suggestions()
+	
+	for recipe_data in recipes:
+		var recipe_name: String = recipe_data["name"]
+		var actions: Array = recipe_data["actions"]
+		
+		if actions.is_empty():
+			continue
+			
+		var recipe_label: Label = Label.new()
+		recipe_label.text = recipe_name
+		recipe_label.add_theme_font_size_override("font_size", 18)
+		_suggestions_container.add_child(recipe_label)
+		
+		for action in actions:
+			var ingredients: Array = action["ingredients"]
+			var gain: float = action["gain"]
+			
+			var btn: Button = Button.new()
+			btn.text = "Gain: %.2f | Ingredients: %s" % [gain, str(ingredients)]
+			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			btn.pressed.connect(_on_suggestion_button_pressed.bind(ingredients))
+			_suggestions_container.add_child(btn)
+
+
+func _on_suggestion_button_pressed(required_item_uids: Array):
+	var uids: Array[int] = []
+	for uid in required_item_uids:
+		uids.append(int(uid))
+	
+	# Emit signal to trigger autofill action directly with UIDs
+	EventBus.player_requested_specific_autofill.emit(uids)
