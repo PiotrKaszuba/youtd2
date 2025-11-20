@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from collections import defaultdict
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -13,7 +14,6 @@ from .constants import (
 	ITEM_ID,
 	ItemValue,
 	Inventory,
-	USAGE_ITEM_USAGE_CAPS,
 )
 from .db import ItemDatabase, RecipeDatabase
 from .models import Item, Recipe, ResultItemType, Rarity
@@ -32,18 +32,100 @@ class OptimizerConfig:
 	phases_included: Optional[Set[GAME_PHASE]] = None
 	greedy_sets_per_recipe: Dict[int, int] = field(default_factory=dict)
 	random_sets_per_recipe: Dict[int, int] = field(default_factory=dict)
+	# Multi-strategy controls
+	strategies: List[str] = field(default_factory=lambda: ["max", "avg", "percentile", "custom"])
+	output_strategy: str = "custom"
+	percentile_target: float = 85.0
+	# Constraints: skip (recipe_id, ingredient_rarity) pairs
+	excluded_recipe_rarities: Set[Tuple[int, int]] = field(default_factory=set)
+
+
+# ---------- Strategy Interfaces ----------
+
+class ValueStrategy:
+	def name(self) -> str:
+		return "base"
+
+	def calculate_next_value(self, current_value: float, candidate_values: List[float]) -> float:
+		# Default safe behavior: keep current value if no candidates
+		if not candidate_values:
+			return current_value
+		return max(candidate_values)
+
+
+class MaxStrategy(ValueStrategy):
+	def name(self) -> str:
+		return "max"
+
+	def calculate_next_value(self, current_value: float, candidate_values: List[float]) -> float:
+		return max(candidate_values) if candidate_values else current_value
+
+
+class AvgStrategy(ValueStrategy):
+	def name(self) -> str:
+		return "avg"
+
+	def calculate_next_value(self, current_value: float, candidate_values: List[float]) -> float:
+		return float(sum(candidate_values)) / float(max(len(candidate_values), 1)) if candidate_values else current_value
+
+
+class PercentileStrategy(ValueStrategy):
+	def __init__(self, percentile: float) -> None:
+		self._p = max(0.0, min(100.0, float(percentile)))
+
+	def name(self) -> str:
+		return "percentile"
+
+	def calculate_next_value(self, current_value: float, candidate_values: List[float]) -> float:
+		if not candidate_values:
+			return current_value
+		try:
+			return float(np.percentile(np.array(candidate_values, dtype=float), self._p))
+		except Exception:
+			values = sorted(candidate_values)
+			if not values:
+				return current_value
+			idx = int(round((self._p / 100.0) * (len(values) - 1)))
+			return float(values[idx])
+
+
+class CustomStrategy(ValueStrategy):
+	def __init__(self, percentile: float) -> None:
+		self._max = MaxStrategy()
+		self._avg = AvgStrategy()
+		self._pct = PercentileStrategy(percentile)
+
+	def name(self) -> str:
+		return "custom"
+
+	def calculate_next_value(self, current_value: float, candidate_values: List[float]) -> float:
+		if not candidate_values:
+			return current_value
+		max_v = self._max.calculate_next_value(current_value, candidate_values)
+		avg_v = self._avg.calculate_next_value(current_value, candidate_values)
+		pct_v = self._pct.calculate_next_value(current_value, candidate_values)
+		return (max_v + avg_v + pct_v) / 3.0
 
 
 def _init_item_values(
 	item_db: ItemDatabase,
-	usage_values: Dict[ITEM_ID, GAME_PHASE_VALUE_DICT],
+	usage_values: Dict[ITEM_ID, Any],
 ) -> Dict[ITEM_ID, ItemValue]:
 	item_values: Dict[ITEM_ID, ItemValue] = {}
 	for item_id in item_db.items.keys():
-		usage = usage_values.get(item_id)
+		usage_entry = usage_values.get(item_id)
+		usage_val = None
+		usage_cap = None
+
+		if isinstance(usage_entry, tuple):
+			usage_val, usage_cap = usage_entry
+		elif isinstance(usage_entry, dict):
+			usage_val = usage_entry
+
 		item_values[item_id] = ItemValue.from_data(
 			item_id=item_id,
-			usage_value=usage,
+			usage_value=usage_val,
+			usage_cap_single=usage_cap,
 		)
 	return item_values
 
@@ -77,6 +159,7 @@ def _build_candidate_pools(
 	item_values: Dict[ITEM_ID, ItemValue],
 	phase: GAME_PHASE,
 	state_inventory: Optional[Inventory] = None,
+	value_func: Optional[Any] = None,
 ) -> Tuple[List[int], List[int]]:
 	permanent_pool: List[int] = []
 	usable_pool: List[int] = []
@@ -109,10 +192,31 @@ def _build_candidate_pools(
 				usable_pool.append(item.id)
 
 	# Sort by current value in this phase to prioritize low-value ingredients.
-	permanent_pool.sort(key=lambda i: item_values[i].get_value(phase))
-	usable_pool.sort(key=lambda i: item_values[i].get_value(phase))
+	if value_func is None:
+		permanent_pool.sort(key=lambda i: item_values[i].get_value(phase))
+		usable_pool.sort(key=lambda i: item_values[i].get_value(phase))
+	else:
+		permanent_pool.sort(key=lambda i: float(value_func(i)))
+		usable_pool.sort(key=lambda i: float(value_func(i)))
 
 	return permanent_pool, usable_pool
+
+
+# ---------- Candidate Generation (rarity-aware, budgeted) ----------
+
+@dataclass
+class CandidateSet:
+	recipe_id: int
+	ingredients: List[int]
+
+
+@dataclass
+class CachedCandidate:
+	recipe_id: int
+	ingredients: Tuple[int, ...]
+	result_rarity: int
+	avg_permanent_level: int
+	result_distribution: Dict[int, float]
 
 
 def _make_value_func(
@@ -134,9 +238,8 @@ def _make_value_func(
 		t = iv.transmute_value.get(phase, 0.0)
 
 		# Apply usage caps if configured.
-		cap = USAGE_ITEM_USAGE_CAPS.get(item_id)
-		if cap is not None:
-			max_count, overflow_val = cap
+		if iv.usage_cap is not None:
+			max_count, overflow_val = iv.usage_cap
 			if state_inventory.get(item_id, 0) >= max_count:
 				u = overflow_val
 
@@ -144,6 +247,236 @@ def _make_value_func(
 
 	return V
 
+
+def _distribute_budgets_by_rarity(
+	engine: HoradricEngine,
+	permanent_pool: List[int],
+	n_perm: int,
+	target_greedy: int,
+	target_random: int,
+	state_inventory: Optional[Inventory],
+	recipe_id: int,
+	config: OptimizerConfig,
+) -> List[Tuple[List[int], int, int]]:
+	"""
+	Group permanent items by rarity and distribute greedy/random budgets proportionally
+	across valid rarities (respecting excluded pairs and inventory sufficiency).
+	Returns a list of (perm_sub_pool, greedy_budget, random_budget).
+	"""
+	if n_perm <= 0:
+		# Only usables: a single batch with the entire budget and empty perm pool
+		return [([], target_greedy, target_random)]
+
+	pools_by_rarity: Dict[int, List[int]] = defaultdict(list)
+	for pid in permanent_pool:
+		item = engine.item_db.items.get(int(pid))
+		if item:
+			pools_by_rarity[item.rarity].append(pid)
+
+	# Valid rarities: enough items and not excluded by config
+	valid_rarities: List[int] = []
+	total_items_count = 0
+	for rarity, pool in pools_by_rarity.items():
+		if state_inventory is not None and len(pool) < n_perm:
+			continue
+		if not pool:
+			continue
+		if (recipe_id, rarity) in (config.excluded_recipe_rarities or set()):
+			continue
+		valid_rarities.append(rarity)
+		total_items_count += len(pool)
+
+	if total_items_count <= 0:
+		return []
+
+	valid_rarities.sort()
+	results: List[Tuple[List[int], int, int]] = []
+	current_g = 0
+	current_r = 0
+	cumulative_items = 0
+	for rarity in valid_rarities:
+		pool = pools_by_rarity[rarity]
+		cumulative_items += len(pool)
+
+		target_g_cum = int(target_greedy * cumulative_items / total_items_count)
+		g_budget = target_g_cum - current_g
+		current_g = target_g_cum
+
+		target_r_cum = int(target_random * cumulative_items / total_items_count)
+		r_budget = target_r_cum - current_r
+		current_r = target_r_cum
+
+		results.append((pool, g_budget, r_budget))
+
+	return results
+
+
+def generate_greedy_sets_for_recipe(
+	engine: HoradricEngine,
+	recipe_id: int,
+	phase: GAME_PHASE,
+	config: OptimizerConfig,
+	item_values: Dict[ITEM_ID, ItemValue],
+	state_inventory: Optional[Inventory] = None,
+	value_func: Optional[Any] = None,
+) -> List[Sequence[ITEM_ID]]:
+	recipe: Recipe = engine.recipe_db.recipes[recipe_id]
+	permanent_pool, usable_pool = _build_candidate_pools(
+		engine=engine,
+		config=config,
+		item_values=item_values,
+		phase=phase,
+		state_inventory=state_inventory,
+		value_func=value_func,
+	)
+	n_perm = recipe.permanent_count
+	n_usable = recipe.usable_count
+
+	greedy_base = config.greedy_sets_per_recipe.get(-1, 0)
+	greedy_delta = config.greedy_sets_per_recipe.get(recipe_id, 0)
+	target_greedy = max(0, greedy_base + greedy_delta)
+	if target_greedy <= 0:
+		return []
+
+	# basic feasibility checks
+	if n_perm <= 0 and n_usable <= 0:
+		return []
+	if state_inventory is not None:
+		if n_perm > 0 and len(permanent_pool) < n_perm:
+			return []
+		if n_usable > 0 and len(usable_pool) < n_usable:
+			return []
+	else:
+		if n_perm > 0 and len(permanent_pool) == 0:
+			return []
+		if n_usable > 0 and len(usable_pool) == 0:
+			return []
+
+	batches = _distribute_budgets_by_rarity(
+		engine=engine,
+		permanent_pool=permanent_pool,
+		n_perm=n_perm,
+		target_greedy=target_greedy,
+		target_random=0,
+		state_inventory=state_inventory,
+		recipe_id=recipe_id,
+		config=config,
+	)
+	if not batches:
+		return []
+
+	candidates: List[Sequence[ITEM_ID]] = []
+	seen: Set[Tuple[int, ...]] = set()
+	for perm_sub_pool, g_budget, _ in batches:
+		if g_budget <= 0:
+			continue
+		# Sliding window over sorted rarity pool
+		num_perm_sets = 1 if n_perm == 0 else max(0, len(perm_sub_pool) - n_perm) + 1
+		iters = min(g_budget, num_perm_sets)
+		for i in range(iters):
+			current: List[ITEM_ID] = []
+			if n_perm > 0:
+				current.extend(perm_sub_pool[i : i + n_perm])
+			if n_usable > 0:
+				current.extend(usable_pool[:n_usable])
+			if not current:
+				continue
+			key = tuple(sorted(current))
+			if key in seen:
+				continue
+			seen.add(key)
+			candidates.append(list(key))
+	return candidates
+
+
+def generate_random_sets_for_recipe(
+	engine: HoradricEngine,
+	recipe_id: int,
+	phase: GAME_PHASE,
+	config: OptimizerConfig,
+	item_values: Dict[ITEM_ID, ItemValue],
+	state_inventory: Optional[Inventory] = None,
+) -> List[Sequence[ITEM_ID]]:
+	# Prefer the authoritative recipe_db
+	recipe = engine.recipe_db.recipes[recipe_id]
+
+	permanent_pool, usable_pool = _build_candidate_pools(
+		engine=engine,
+		config=config,
+		item_values=item_values,
+		phase=phase,
+		state_inventory=state_inventory,
+	)
+	n_perm = recipe.permanent_count
+	n_usable = recipe.usable_count
+
+	random_base = config.random_sets_per_recipe.get(-1, 0)
+	random_delta = config.random_sets_per_recipe.get(recipe_id, 0)
+	target_random = max(0, random_base + random_delta)
+	if target_random <= 0:
+		return []
+
+	if n_perm <= 0 and n_usable <= 0:
+		return []
+	if state_inventory is not None:
+		if n_perm > 0 and len(permanent_pool) < n_perm:
+			return []
+		if n_usable > 0 and len(usable_pool) < n_usable:
+			return []
+	else:
+		if n_perm > 0 and len(permanent_pool) == 0:
+			return []
+		if n_usable > 0 and len(usable_pool) == 0:
+			return []
+
+	batches = _distribute_budgets_by_rarity(
+		engine=engine,
+		permanent_pool=permanent_pool,
+		n_perm=n_perm,
+		target_greedy=0,
+		target_random=target_random,
+		state_inventory=state_inventory,
+		recipe_id=recipe_id,
+		config=config,
+	)
+	if not batches:
+		return []
+
+	import random
+	candidates: List[Sequence[ITEM_ID]] = []
+	seen: Set[Tuple[int, ...]] = set()
+	for perm_sub_pool, _, r_budget in batches:
+		if r_budget <= 0:
+			continue
+		tries = max(r_budget * 4, r_budget)
+		for _ in range(tries):
+			current: List[ITEM_ID] = []
+			if n_perm > 0:
+				if state_inventory is not None:
+					if len(perm_sub_pool) < n_perm:
+						continue
+					current.extend(random.sample(perm_sub_pool, n_perm))
+				else:
+					current.extend(random.choices(perm_sub_pool, k=n_perm))
+			if n_usable > 0:
+				if state_inventory is not None:
+					if len(usable_pool) < n_usable:
+						continue
+					current.extend(random.sample(usable_pool, n_usable))
+				else:
+					if not usable_pool:
+						continue
+					current.extend(random.choices(usable_pool, k=n_usable))
+			if not current:
+				continue
+			key = tuple(sorted(current))
+			if key in seen:
+				continue
+			seen.add(key)
+			candidates.append(list(key))
+			if len(candidates) >= r_budget:
+				break
+	return candidates
 
 def generate_candidate_sets_for_recipe(
 	engine: HoradricEngine,
@@ -167,112 +500,33 @@ def generate_candidate_sets_for_recipe(
 	if config.recipes_included is not None and recipe_id not in config.recipes_included:
 		return []
 
-	# Determine how many greedy and random sets we aim to generate for this recipe.
-	greedy_base = config.greedy_sets_per_recipe.get(-1, 0)
-	greedy_delta = config.greedy_sets_per_recipe.get(recipe_id, 0)
-	target_greedy = max(0, greedy_base + greedy_delta)
-
-	random_base = config.random_sets_per_recipe.get(-1, 0)
-	random_delta = config.random_sets_per_recipe.get(recipe_id, 0)
-	target_random = max(0, random_base + random_delta)
-
-	if target_greedy <= 0 and target_random <= 0:
-		return []
-
-	permanent_pool, usable_pool = _build_candidate_pools(
+	greedy = generate_greedy_sets_for_recipe(
 		engine=engine,
+		recipe_id=recipe_id,
+		phase=phase,
 		config=config,
 		item_values=item_values,
-		phase=phase,
 		state_inventory=state_inventory,
 	)
-
-	n_perm = recipe.permanent_count
-	n_usable = recipe.usable_count
-
-	if n_perm <= 0 and n_usable <= 0:
-		return []
-
-	# Not enough items to satisfy counts:
-	# - In inventory-aware mode, we require enough copies in the expanded pools.
-	# - In global mode, we only require non-empty pools (sampling can reuse items).
-	if state_inventory is not None:
-		if n_perm > 0 and len(permanent_pool) < n_perm:
-			return []
-		if n_usable > 0 and len(usable_pool) < n_usable:
-			return []
-	else:
-		if n_perm > 0 and len(permanent_pool) == 0:
-			return []
-		if n_usable > 0 and len(usable_pool) == 0:
-			return []
-
-	candidates: List[Sequence[ITEM_ID]] = []
+	randoms = generate_random_sets_for_recipe(
+		engine=engine,
+		recipe_id=recipe_id,
+		phase=phase,
+		config=config,
+		item_values=item_values,
+		state_inventory=state_inventory,
+	)
+	# Merge and de-dup
 	seen: Set[Tuple[int, ...]] = set()
-
-	# Greedy sets via sliding window over permanents (or just first usable slice).
-	if target_greedy > 0:
-		if n_perm > 0:
-			max_perm_start = max(0, len(permanent_pool) - n_perm)
-			num_perm_sets = max_perm_start + 1
-		else:
-			max_perm_start = 0
-			num_perm_sets = 1
-
-		max_greedy = min(target_greedy, num_perm_sets)
-
-		for i in range(max_greedy):
-			current: List[ITEM_ID] = []
-			if n_perm > 0:
-                # sliding window of size n_perm
-				current.extend(permanent_pool[i : i + n_perm])
-			if n_usable > 0:
-				current.extend(usable_pool[:n_usable])
-			if current:
-				key = tuple(sorted(current))
-				if key not in seen:
-					seen.add(key)
-					candidates.append(current)
-
-	# Random sets around pools
-	if target_random > 0:
-		import random
-
-		max_random = target_random
-		for _ in range(max_random * 3):  # allow a few retries to avoid duplicates
-			current: List[ITEM_ID] = []
-			if n_perm > 0:
-				if state_inventory is not None:
-					# Inventory-aware: sample without replacement from expanded pool
-					# to respect available counts.
-					if len(permanent_pool) < n_perm:
-						break
-					current.extend(random.sample(permanent_pool, n_perm))
-				else:
-					# Global: allow duplicates via sampling with replacement.
-					if not permanent_pool:
-						break
-					current.extend(random.choices(permanent_pool, k=n_perm))
-			if n_usable > 0:
-				if state_inventory is not None:
-					if len(usable_pool) < n_usable:
-						break
-					current.extend(random.sample(usable_pool, n_usable))
-				else:
-					if not usable_pool:
-						break
-					current.extend(random.choices(usable_pool, k=n_usable))
-			if not current:
-				continue
-			key = tuple(sorted(current))
+	out: List[Sequence[ITEM_ID]] = []
+	for lst in (greedy, randoms):
+		for S in lst:
+			key = tuple(sorted(S))
 			if key in seen:
 				continue
 			seen.add(key)
-			candidates.append(current)
-			if len(candidates) >= target_greedy + target_random:
-				break
-
-	return candidates
+			out.append(list(key))
+	return out
 
 
 def _compute_action_value(
@@ -341,7 +595,7 @@ def _compute_action_value(
 
 def run_value_iteration(
 	engine: HoradricEngine,
-	usage_values: Dict[ITEM_ID, GAME_PHASE_VALUE_DICT],
+	usage_values: Dict[ITEM_ID, Any],
 	config: OptimizerConfig,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
@@ -354,19 +608,35 @@ def run_value_iteration(
 
 	# Extract U and T tables for iterative updates.
 	U: Dict[ITEM_ID, Dict[GAME_PHASE, float]] = {}
-	T: Dict[ITEM_ID, Dict[GAME_PHASE, float]] = {}
+	T_tables: Dict[str, Dict[ITEM_ID, Dict[GAME_PHASE, float]]] = {}
+	strategies: List[ValueStrategy] = []
 
 	num_phases = len(GAME_PHASES)
 
 	for item_id, iv in item_values.items():
 		U[item_id] = dict(iv.usage_value)
-		T[item_id] = {phase_idx: 0.0 for phase_idx in range(num_phases)}
+	# Build strategies
+	strategy_names = list(dict.fromkeys(config.strategies or ["max", "avg", "percentile", "custom"]))
+	for s in strategy_names:
+		if s == "max":
+			strategies.append(MaxStrategy())
+		elif s == "avg":
+			strategies.append(AvgStrategy())
+		elif s == "percentile":
+			strategies.append(PercentileStrategy(config.percentile_target))
+		elif s == "custom":
+			strategies.append(CustomStrategy(config.percentile_target))
+		else:
+			strategies.append(MaxStrategy())
+	for strat in strategies:
+		T_tables[strat.name()] = {item_id: {phase_idx: 0.0 for phase_idx in range(num_phases)} for item_id in item_values.keys()}
 
 	return _run_value_iteration_core(
 		engine=engine,
 		item_values=item_values,
 		U=U,
-		T=T,
+		T_tables=T_tables,
+		strategies=strategies,
 		config=config,
 		num_iterations=config.num_iterations,
 		state_inventory=None,
@@ -378,7 +648,8 @@ def _run_value_iteration_core(
 	engine: HoradricEngine,
 	item_values: Dict[ITEM_ID, ItemValue],
 	U: Dict[ITEM_ID, Dict[GAME_PHASE, float]],
-	T: Dict[ITEM_ID, Dict[GAME_PHASE, float]],
+	T_tables: Dict[str, Dict[ITEM_ID, Dict[GAME_PHASE, float]]],
+	strategies: List[ValueStrategy],
 	config: OptimizerConfig,
 	num_iterations: int,
 	state_inventory: Optional[Inventory],
@@ -395,73 +666,184 @@ def _run_value_iteration_core(
 	alpha = config.learning_rate
 	phase_indices = config.phases_included if config.phases_included is not None else range(len(GAME_PHASES))
 
+	# Precompute random candidate cache once for all phases/recipes
+	random_cache: Dict[int, Dict[int, List[CachedCandidate]]] = {}
+	for phase in phase_indices:
+		random_cache[phase] = {}
+		for recipe in engine.recipe_db.recipes.values():
+			recipe_id = recipe.id
+			if state_recipes_available is not None and recipe_id not in state_recipes_available:
+				continue
+			if config.recipes_included is not None and recipe_id not in config.recipes_included:
+				continue
+			random_sets = generate_random_sets_for_recipe(
+				engine=engine,
+				recipe_id=recipe_id,
+				phase=phase,
+				config=config,
+				item_values=item_values,
+				state_inventory=state_inventory,
+			)
+
+			print(f"Random sets for recipe {recipe_id}: {len(random_sets)}")
+
+			cached_list: List[CachedCandidate] = []
+			for S in random_sets:
+				if not S:
+					continue
+				permanent_levels: List[int] = []
+				ingredient_rarity = Rarity.COMMON
+				for item_id in S:
+					item = engine.item_db.items.get(int(item_id))
+					if item is not None and item.is_permanent:
+						permanent_levels.append(item.required_wave_level)
+						ingredient_rarity = item.rarity
+				if permanent_levels:
+					avg_permanent_level = int(sum(permanent_levels) // max(len(permanent_levels), 1))
+				else:
+					lvl_min, lvl_max = _get_phase_level_bounds(phase)
+					avg_permanent_level = (lvl_min + lvl_max) // 2
+				result_rarity = ingredient_rarity + recipe.rarity_change
+				if result_rarity < Rarity.COMMON or result_rarity > Rarity.UNIQUE:
+					continue
+				dist = get_single_result_distribution(
+					recipe=recipe,
+					item_db=engine.item_db,
+					avg_permanent_level=avg_permanent_level,
+					result_rarity=result_rarity,
+					explicit_ingredient_ids=S,
+				)
+				cached_list.append(CachedCandidate(
+					recipe_id=recipe_id,
+					ingredients=tuple(sorted(S)),
+					result_rarity=result_rarity,
+					avg_permanent_level=avg_permanent_level,
+					result_distribution=dist,
+				))
+			random_cache[phase][recipe_id] = cached_list
+
 	for _ in tqdm(range(num_iterations)):
 		for phase in phase_indices:
-			def V(item_id: ITEM_ID) -> float:
-				return max(U[item_id].get(phase, 0.0), T[item_id].get(phase, 0.0))
-
-			# Per-item best candidate value in this phase.
-			# For global optimization we seed from current T so values are
-			# monotone non-decreasing. For state-local refinement we allow T
-			# to decrease, so we seed from 0.0 each iteration.
-			if state_inventory is None and state_recipes_available is None:
-				best_candidate_value: Dict[ITEM_ID, float] = {
-					item_id: T[item_id].get(phase, 0.0) for item_id in item_values.keys()
-				}
-			else:
-				best_candidate_value = {item_id: 0.0 for item_id in item_values.keys()}
-
+			# Build greedy candidates fresh per iteration (based on current item_values face values).
+			greedy_cached_by_recipe: Dict[int, List[CachedCandidate]] = {}
 			for recipe in engine.recipe_db.recipes.values():
 				recipe_id = recipe.id
-
 				if state_recipes_available is not None and recipe_id not in state_recipes_available:
 					continue
 				if config.recipes_included is not None and recipe_id not in config.recipes_included:
 					continue
-
-				candidate_sets = generate_candidate_sets_for_recipe(
+				greedy_sets = generate_greedy_sets_for_recipe(
 					engine=engine,
 					recipe_id=recipe_id,
 					phase=phase,
 					config=config,
 					item_values=item_values,
 					state_inventory=state_inventory,
+					value_func=lambda i, T_tables=T_tables, U=U, phase=phase, config=config: max(
+						U[i].get(phase, 0.0),
+						T_tables.get(config.output_strategy or "custom", {}).get(i, {}).get(phase, 0.0),
+					),
 				)
-				for S in candidate_sets:
+				cached_list: List[CachedCandidate] = []
+				for S in greedy_sets:
 					if not S:
 						continue
-
-					expected_result_value, _ = _compute_action_value(
-						engine=engine,
-						recipe=recipe,
-						S=S,
-						phase=phase,
-						value_func=V,
-					)
-
-					per_item_candidate = expected_result_value / float(len(S))
-
+					permanent_levels: List[int] = []
+					ingredient_rarity = None
 					for item_id in S:
-						current_best = best_candidate_value.get(item_id, 0.0)
-						if per_item_candidate > current_best:
-							best_candidate_value[item_id] = per_item_candidate
+						item = engine.item_db.items.get(int(item_id))
+						assert item is not None and item.is_permanent and (ingredient_rarity is None or item.rarity == ingredient_rarity)
+						permanent_levels.append(item.required_wave_level)
+						ingredient_rarity = item.rarity
+					
+					avg_permanent_level = int(sum(permanent_levels) // max(len(permanent_levels), 1))
+					result_rarity = ingredient_rarity + recipe.rarity_change
+					if result_rarity < Rarity.COMMON or result_rarity > Rarity.UNIQUE:
+						continue
+					dist = get_single_result_distribution(
+						recipe=recipe,
+						item_db=engine.item_db,
+						avg_permanent_level=avg_permanent_level,
+						result_rarity=result_rarity,
+						explicit_ingredient_ids=S,
+					)
+					cached_list.append(CachedCandidate(
+						recipe_id=recipe_id,
+						ingredients=tuple(sorted(S)),
+						result_rarity=result_rarity,
+						avg_permanent_level=avg_permanent_level,
+						result_distribution=dist,
+					))
+				greedy_cached_by_recipe[recipe_id] = cached_list
 
-			# Soft-max update for T in this phase.
-			for item_id in item_values.keys():
-				old_t = T[item_id].get(phase, 0.0)
-				target = best_candidate_value.get(item_id, old_t)
-				T[item_id][phase] = (1.0 - alpha) * old_t + alpha * target
+			# Evaluate per strategy
+			for strategy in strategies:
+				T = T_tables[strategy.name()]
+
+				def V(item_id: ITEM_ID) -> float:
+					return max(U[item_id].get(phase, 0.0), T[item_id].get(phase, 0.0))
+
+				candidate_values_by_item: Dict[ITEM_ID, List[float]] = {item_id: [] for item_id in item_values.keys()}
+
+				# Random cached
+				for recipe_id, cc_list in random_cache.get(phase, {}).items():
+					recipe = engine.recipe_db.recipes[recipe_id]
+					result_count = recipe.result_count
+					for cc in cc_list:
+						S = list(cc.ingredients)
+						if not S:
+							continue
+						expected_per_slot = 0.0
+						for out_id, prob in cc.result_distribution.items():
+							expected_per_slot += prob * V(int(out_id))
+						
+						expected_result_value = result_count * expected_per_slot
+						per_item_candidate = expected_result_value / float(max(len(S), 1))
+						for i in S:
+							candidate_values_by_item[i].append(per_item_candidate)
+
+				# Greedy cached
+				for recipe_id, cc_list in greedy_cached_by_recipe.items():
+					recipe = engine.recipe_db.recipes[recipe_id]
+					result_count = recipe.result_count
+					for cc in cc_list:
+						S = list(cc.ingredients)
+						if not S:
+							continue
+						expected_per_slot = 0.0
+						for out_id, prob in cc.result_distribution.items():
+							expected_per_slot += prob * V(int(out_id))
+						expected_result_value = result_count * expected_per_slot
+						per_item_candidate = expected_result_value / float(max(len(S), 1))
+						for i in S:
+							candidate_values_by_item[i].append(per_item_candidate)
+
+				# Soft update per item
+				for item_id in item_values.keys():
+					old_t = T[item_id].get(phase, 0.0)
+					target = strategy.calculate_next_value(old_t, candidate_values_by_item.get(item_id, []))
+					T[item_id][phase] = (1.0 - alpha) * old_t + alpha * target
+				T_tables[strategy.name()] = T
 
 	# Build final ItemValue objects with learned T.
 	final_item_values: Dict[ITEM_ID, ItemValue] = {}
+	# Select output face strategy
+	output_strategy = config.output_strategy or "custom"
+	if output_strategy not in T_tables:
+		output_strategy = next(iter(T_tables.keys()))
 	for item_id, iv in item_values.items():
-		transmute_value: GAME_PHASE_VALUE_DICT = {}
+		face: GAME_PHASE_VALUE_DICT = {}
 		for phase_idx in range(len(GAME_PHASES)):
-			transmute_value[phase_idx] = T[item_id].get(phase_idx, 0.0)
+			face[phase_idx] = T_tables[output_strategy][item_id].get(phase_idx, 0.0)
+		all_tables: Dict[str, GAME_PHASE_VALUE_DICT] = {}
+		for name, table in T_tables.items():
+			all_tables[name] = {phase_idx: table[item_id].get(phase_idx, 0.0) for phase_idx in range(len(GAME_PHASES))}
 		final_item_values[item_id] = ItemValue(
 			item_id=item_id,
 			usage_value=U[item_id],
-			transmute_value=transmute_value,
+			transmute_value=face,
+			transmute_values_by_strategy=all_tables,
+			usage_cap=iv.usage_cap,
 		)
 
 	return final_item_values
@@ -474,7 +856,7 @@ def run_state_local_refinement(
 	state_recipes_available: Optional[Set[int]],
 	config: OptimizerConfig,
 	extra_iterations: int = 10,
-	new_usage_values: Optional[Dict[ITEM_ID, GAME_PHASE_VALUE_DICT]] = None,
+	new_usage_values: Optional[Dict[ITEM_ID, Any]] = None,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Refine T/V for a specific state, using global_item_values as initialization.
@@ -485,30 +867,66 @@ def run_state_local_refinement(
 	item_values = global_item_values
 
 	U: Dict[ITEM_ID, Dict[GAME_PHASE, float]] = {}
-	T: Dict[ITEM_ID, Dict[GAME_PHASE, float]] = {}
+	T_tables: Dict[str, Dict[ITEM_ID, Dict[GAME_PHASE, float]]] = {}
+	strategies: List[ValueStrategy] = []
+	strategy_names = list(dict.fromkeys(config.strategies or ["max", "avg", "percentile", "custom"]))
+	for s in strategy_names:
+		if s == "max":
+			strategies.append(MaxStrategy())
+		elif s == "avg":
+			strategies.append(AvgStrategy())
+		elif s == "percentile":
+			strategies.append(PercentileStrategy(config.percentile_target))
+		elif s == "custom":
+			strategies.append(CustomStrategy(config.percentile_target))
+		else:
+			strategies.append(MaxStrategy())
+	for strat in strategies:
+		T_tables[strat.name()] = {}
 
 	for item_id, iv in item_values.items():
 		U[item_id] = dict(iv.usage_value)
-		T[item_id] = dict(iv.transmute_value)
+		if iv.transmute_values_by_strategy is not None:
+			for strat in strategies:
+				table = iv.transmute_values_by_strategy.get(strat.name(), None)
+				if table is not None:
+					T_tables[strat.name()][item_id] = dict(table)
+				else:
+					T_tables[strat.name()][item_id] = dict(iv.transmute_value)
+		else:
+			for strat in strategies:
+				T_tables[strat.name()][item_id] = dict(iv.transmute_value)
 
 	# Optionally overlay new usage values for this state.
 	if new_usage_values is not None:
-		for item_id, usage_dict in new_usage_values.items():
+		for item_id, usage_entry in new_usage_values.items():
 			if item_id not in U:
 				continue
-			iv_override = ItemValue.from_data(
-				item_id=item_id,
-				usage_value=dict(usage_dict),
-				inventory=state_inventory,
-				usage_caps=USAGE_ITEM_USAGE_CAPS,
-			)
-			U[item_id] = dict(iv_override.usage_value)
+			
+			# Parse potential tuple structure
+			usage_val = None
+			usage_cap = None
+			if isinstance(usage_entry, tuple):
+				usage_val, usage_cap = usage_entry
+			elif isinstance(usage_entry, dict):
+				usage_val = usage_entry
+				usage_cap = item_values[item_id].usage_cap
+			
+			if usage_val is not None:
+				iv_override = ItemValue.from_data(
+					item_id=item_id,
+					usage_value=dict(usage_val),
+					inventory=state_inventory,
+					usage_cap_single=usage_cap,
+				)
+				U[item_id] = dict(iv_override.usage_value)
 
 	return _run_value_iteration_core(
 		engine=engine,
 		item_values=item_values,
 		U=U,
-		T=T,
+		T_tables=T_tables,
+		strategies=strategies,
 		config=config,
 		num_iterations=extra_iterations,
 		state_inventory=state_inventory,
@@ -667,5 +1085,3 @@ __all__ = [
 	"choose_best_transmute_action",
 	"list_transmute_actions_for_state",
 ]
-
-
