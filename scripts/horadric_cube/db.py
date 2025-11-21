@@ -16,22 +16,11 @@ class ItemDatabase:
 
 	def __hash__(self) -> int:
 		if self._hash is None:
-			# Hash based on sorted keys and item content hashes (if Item is hashable)
-			# Assuming Item is immutable or we trust it enough for this session.
-			# We use a frozenset of items for order independence.
-			# Since Item doesn't implement __hash__ yet, we might need to or use id/content.
-			# Actually, let's just hash the sorted IDs for filter identification, 
-			# and maybe length.
-			# A truly safe hash would hash all item contents.
-			# For now, let's hash sorted item IDs as a proxy for "filtered subset".
-			# If item *properties* change, this won't catch it, but for filtering it's fine.
 			self.__object_setattr__("_hash", hash(tuple(sorted(self.items.keys()))))
 		return self._hash
-
 	def __object_setattr__(self, name, value):
 		# Helper for frozen dataclass setattr
 		object.__setattr__(self, name, value)
-
 	def filter_items(
 		self,
 		level_min: Optional[int] = None,
