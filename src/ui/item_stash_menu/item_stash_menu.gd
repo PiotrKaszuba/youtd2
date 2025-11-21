@@ -38,11 +38,6 @@ enum SmartAskState {
 
 var _smart_ask_state: SmartAskState = SmartAskState.IDLE
 var _current_request_id: int = 0
-# Icon resources
-var _icon_ask: Texture2D = preload("res://assets/hud/misc3.png") # Atlas placeholder
-var _icon_cancel: Texture2D = preload("res://assets/hud/hud_atlas.png") # Atlas placeholder
-var _atlas_icon_ask: AtlasTexture
-var _atlas_icon_cancel: AtlasTexture
 
 #########################
 ### Code starts here  ###
@@ -50,15 +45,6 @@ var _atlas_icon_cancel: AtlasTexture
 
 # NOTE: the background buttons are also added while the scene is open in editor, to check how it looks visually.
 func _ready():
-	# Setup atlas textures for icons
-	_atlas_icon_ask = AtlasTexture.new()
-	_atlas_icon_ask.atlas = _icon_ask
-	_atlas_icon_ask.region = Rect2(640, 0, 128, 128) # Original ask icon
-	
-	_atlas_icon_cancel = AtlasTexture.new()
-	_atlas_icon_cancel.atlas = _icon_cancel
-	_atlas_icon_cancel.region = Rect2(10, 11, 110, 109) # Lock filter icon style (cross/close)
-
 	_update_optimizer_button_state()
 
 	var min_slot_count: int = MIN_ROW_COUNT * COLUMN_COUNT
@@ -236,14 +222,14 @@ func _set_horadric_cube_average_level():
 func _update_optimizer_button_state():
 	match _smart_ask_state:
 		SmartAskState.IDLE:
-			_optimizer_button.icon = _atlas_icon_ask
+			_optimizer_button.text = "Suggest"
 			_optimizer_button.tooltip_text = "Ask for smart transmutation recipes"
 			_suggestions_scroll_container.hide()
 		SmartAskState.WAITING:
-			_optimizer_button.icon = _atlas_icon_cancel
+			_optimizer_button.text = "Cancel"
 			_optimizer_button.tooltip_text = "Cancel request"
 		SmartAskState.RESULTS:
-			_optimizer_button.icon = _atlas_icon_cancel
+			_optimizer_button.text = "Clear"
 			_optimizer_button.tooltip_text = "Clear suggestions"
 			_suggestions_scroll_container.show()
 
@@ -456,8 +442,14 @@ func _start_optimization_request():
 	
 	var json_body: String = JSON.stringify(body)
 	var headers: PackedStringArray = ["Content-Type: application/json"]
-	_http_request.request("http://localhost:8000/optimize", headers, HTTPClient.METHOD_POST, json_body)
+	var error: Error = _http_request.request("http://127.0.0.1:8003/optimize", headers, HTTPClient.METHOD_POST, json_body)
 	
+	if error != OK:
+		_smart_ask_state = SmartAskState.IDLE
+		_update_optimizer_button_state()
+		Utils.add_ui_error(local_player, "Failed to send request: %d" % error)
+		return
+
 	_smart_ask_state = SmartAskState.WAITING
 	_update_optimizer_button_state()
 	_request_timer.start()
