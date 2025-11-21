@@ -98,18 +98,18 @@ def initialize_engine():
 		print(f"Value iteration complete in {time.time() - start_time:.2f}s")
 		save_item_values(item_values)
 
-	from scripts.horadric_cube.simulate_strange_item import strange_item_per_phase_usage_val
-	res = strange_item_per_phase_usage_val(item_values, 350, 24, 0.99)
-	strange_item_value = item_values[STRANGE_ITEM]
-	new_strange_item_value = ItemValue(
-		item_id=strange_item_value.item_id,
-		usage_value=res,
-		transmute_value=strange_item_value.transmute_value,
-		transmute_values_by_strategy=strange_item_value.transmute_values_by_strategy,
-		usage_cap=strange_item_value.usage_cap,
-	)
-
-	item_values[STRANGE_ITEM] = new_strange_item_value
+	# from scripts.horadric_cube.simulate_strange_item import strange_item_per_phase_usage_val
+	# res = strange_item_per_phase_usage_val(item_values, 350, 24, 0.99)
+	# strange_item_value = item_values[STRANGE_ITEM]
+	# new_strange_item_value = ItemValue(
+	# 	item_id=strange_item_value.item_id,
+	# 	usage_value=res,
+	# 	transmute_value=strange_item_value.transmute_value,
+	# 	transmute_values_by_strategy=strange_item_value.transmute_values_by_strategy,
+	# 	usage_cap=strange_item_value.usage_cap,
+	# )
+	#
+	# item_values[STRANGE_ITEM] = new_strange_item_value
 	# print(res)
 
 	
