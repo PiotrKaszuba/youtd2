@@ -73,9 +73,14 @@ def initialize_engine():
 		random_sets_per_recipe={-1: 100_000},
 		num_iterations=50,
 		learning_rate=0.15,
-		strategies=["percentile",],
-		output_strategy="percentile",
-		percentile_target=98.5,
+		strategies=["custom",],
+		output_strategy="custom",
+		percentile_target=97.5,
+		custom_strategy_weights={
+			"max": 0,
+			"avg": 0.4,
+			"pct": 0.6,
+		},
 	)
 
 	item_values = load_item_values() if os.path.exists("item_values.pkl") else None
