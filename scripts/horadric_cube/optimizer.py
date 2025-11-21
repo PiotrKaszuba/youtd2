@@ -38,6 +38,7 @@ class OptimizerConfig:
 	strategies: List[str] = field(default_factory=lambda: ["max", "avg", "percentile", "custom"])
 	output_strategy: str = "custom"
 	percentile_target: float = 85.0
+	custom_strategy_weights: Dict[str, float] = field(default_factory=dict)
 	# Constraints: skip (recipe_id, ingredient_rarity) pairs
 	excluded_recipe_rarities: Set[Tuple[int, int]] = field(default_factory=set)
 
@@ -92,10 +93,11 @@ class PercentileStrategy(ValueStrategy):
 
 
 class CustomStrategy(ValueStrategy):
-	def __init__(self, percentile: float) -> None:
+	def __init__(self, percentile: float, custom_strategy_weights: Dict[str, float]) -> None:
 		self._max = MaxStrategy()
 		self._avg = AvgStrategy()
 		self._pct = PercentileStrategy(percentile)
+		self._custom_strategy_weights = custom_strategy_weights
 
 	def name(self) -> str:
 		return "custom"
@@ -103,10 +105,27 @@ class CustomStrategy(ValueStrategy):
 	def calculate_next_value(self, current_value: float, candidate_values: List[float]) -> float:
 		if not candidate_values:
 			return current_value
-		max_v = self._max.calculate_next_value(current_value, candidate_values)
-		avg_v = self._avg.calculate_next_value(current_value, candidate_values)
-		pct_v = self._pct.calculate_next_value(current_value, candidate_values)
-		return (max_v + avg_v + pct_v) / 3.0
+		weights = self._custom_strategy_weights
+		if not weights:
+			weights = {
+				"max": 1.0,
+				"avg": 1.0,
+				"pct": 1.0,
+			}
+		
+		if "max" in weights and weights["max"] != 0.0:
+			max_v = weights["max"] * self._max.calculate_next_value(current_value, candidate_values)
+		else:
+			max_v = 0.0
+		if "avg" in weights and weights["avg"] != 0.0:
+			avg_v = weights["avg"] * self._avg.calculate_next_value(current_value, candidate_values)
+		else:
+			avg_v = 0.0
+		if "pct" in weights and weights["pct"] != 0.0:
+			pct_v = weights["pct"] * self._pct.calculate_next_value(current_value, candidate_values)
+		else:
+			pct_v = 0.0
+		return (max_v + avg_v + pct_v) / float(max(len(weights.values()), 1))
 
 
 def _init_item_values(
@@ -147,9 +166,6 @@ def _update_item_values(
 			usage_val = usage_entry
 		item_values_new[item_id] = iv.update_keep_transmute_value(usage_val, inventory, usage_cap_single=usage_cap)
 	return item_values_new
-	
-
-
 
 
 def _build_candidate_pools(
@@ -609,7 +625,7 @@ def run_value_iteration(
 		elif s == "percentile":
 			strategies.append(PercentileStrategy(config.percentile_target))
 		elif s == "custom":
-			strategies.append(CustomStrategy(config.percentile_target))
+			strategies.append(CustomStrategy(config.percentile_target, config.custom_strategy_weights))
 		else:
 			strategies.append(MaxStrategy())
 	for strat in strategies:
@@ -859,7 +875,7 @@ def run_state_local_refinement(
 		elif s == "percentile":
 			strategies.append(PercentileStrategy(config.percentile_target))
 		elif s == "custom":
-			strategies.append(CustomStrategy(config.percentile_target))
+			strategies.append(CustomStrategy(config.percentile_target, config.custom_strategy_weights))
 		else:
 			strategies.append(MaxStrategy())
 	for strat in strategies:
