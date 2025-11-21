@@ -62,6 +62,15 @@ def get_phase_level_bounds(phase: GAME_PHASE) -> Tuple[int, int]:
 
 	return lvl_min, lvl_max
 
+
+def get_phase_avg_level(phase: GAME_PHASE) -> int:
+	"""
+	Get the average level for a given phase index.
+	"""
+	lvl_min, lvl_max = get_phase_level_bounds(phase)
+	return (lvl_min + lvl_max) // 2
+
+
 @dataclass(frozen=True)
 class ItemValue:
 	item_id: ITEM_ID
