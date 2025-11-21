@@ -27,7 +27,7 @@ from scripts.horadric_cube.constants import (
 	Inventory,
 	get_game_phase_index, RECIPE_REASSEMBLE, RECIPE_PERFECT, GAME_PHASES, RUSTY_MINING_PICK, VOID_VIAL,
 	ASSASINATION_ARROW, TRAINING_MANUAL, YOUNG_THIEF_CLOAK, SKULL_TROPHY, RING_OF_LUCK, SCARAB_AMULET, MAGIC_GLOVES,
-	SPIDER_SILK, ORC_WAR_SPEAR, MAGICAL_ESSENCE, BOMB_SHELLS, NINJA_GLAIVE, SCROLL_OF_MYTHS, LAND_MINE,
+	SPIDER_SILK, ORC_WAR_SPEAR, MAGICAL_ESSENCE, BOMB_SHELLS, NINJA_GLAIVE, SCROLL_OF_MYTHS, LAND_MINE, ItemValue,
 )
 from scripts.horadric_cube.models import Rarity
 
@@ -70,16 +70,16 @@ def initialize_engine():
 		ingredient_rarity_whitelist={Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.UNIQUE},
 		phases_included={i for i in range(len(GAME_PHASES))},
 		greedy_sets_per_recipe={-1: 1000},
-		random_sets_per_recipe={-1: 100_000},
+		random_sets_per_recipe={-1: 200_000, RECIPE_PERFECT: 200_000},
 		num_iterations=50,
 		learning_rate=0.15,
 		strategies=["custom",],
 		output_strategy="custom",
-		percentile_target=97.5,
+		percentile_target=98.5,
 		custom_strategy_weights={
 			"max": 0,
-			"avg": 0.2,
-			"pct": 0.8,
+			"avg": 0.15,
+			"pct": 0.85,
 		},
 	)
 
@@ -98,6 +98,21 @@ def initialize_engine():
 		print(f"Value iteration complete in {time.time() - start_time:.2f}s")
 		save_item_values(item_values)
 
+	from scripts.horadric_cube.simulate_strange_item import strange_item_per_phase_usage_val
+	res = strange_item_per_phase_usage_val(item_values, 350, 24, 0.99)
+	strange_item_value = item_values[STRANGE_ITEM]
+	new_strange_item_value = ItemValue(
+		item_id=strange_item_value.item_id,
+		usage_value=res,
+		transmute_value=strange_item_value.transmute_value,
+		transmute_values_by_strategy=strange_item_value.transmute_values_by_strategy,
+		usage_cap=strange_item_value.usage_cap,
+	)
+
+	item_values[STRANGE_ITEM] = new_strange_item_value
+	# print(res)
+
+	
 def send_mock_client_request():
 	"""
 	Send a single mock optimization request to the locally running server.
@@ -216,7 +231,7 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 			ingredient_rarity_whitelist=config.ingredient_rarity_whitelist,
 			phases_included={phase_idx},
 			greedy_sets_per_recipe={-1: 100},
-			random_sets_per_recipe={-1: 2000},
+			random_sets_per_recipe={-1: 10000},
 			output_strategy=config.output_strategy,
 			percentile_target=config.percentile_target
 		)
