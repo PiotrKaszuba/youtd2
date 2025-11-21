@@ -3,8 +3,10 @@ import socketserver
 import json
 import sys
 import time
+import threading
+import urllib.request
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Set, Sequence
 
 # Add the parent directory to sys.path so we can import from scripts
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -14,26 +16,31 @@ from scripts.horadric_cube.optimizer import (
 	OptimizerConfig,
 	run_value_iteration,
 	list_transmute_actions_for_state,
+	save_item_values,
+	load_item_values,
+	cached_get_single_result_distribution,
+	_compute_action_value,
 )
 from scripts.horadric_cube.constants import (
 	USAGE_ITEM_VALUES,
 	STRANGE_ITEM,
 	GAME_PHASE,
 	Inventory,
-	get_game_phase_index,
+	get_game_phase_index, RECIPE_REASSEMBLE, RECIPE_PERFECT, GAME_PHASES,
 )
 from scripts.horadric_cube.models import Rarity
 
-PORT = 8000
+PORT = 8003
 
 # Global engine and values, initialized on startup
 engine: Optional[HoradricEngine] = None
 item_values: Optional[Dict[int, Any]] = None
+global_candidate_pool: Optional[Dict[int, List[Sequence[int]]]] = None
 config: Optional[OptimizerConfig] = None
 
 def initialize_engine():
-	global engine, item_values, config
-	print("Initializing Horadric Engine...")
+	global engine, item_values, global_candidate_pool, config
+	print("Initializing Horadric Engine...", flush=True)
 	engine = HoradricEngine.create_horadric_engine()
 	
 	# Filter items as in the demo
@@ -47,29 +54,111 @@ def initialize_engine():
 	usage_values_seed = dict(USAGE_ITEM_VALUES)
 	
 	# Default config
-	phase = 5 # Default phase if not specified
 	config = OptimizerConfig(
+		recipes_included={RECIPE_REASSEMBLE, RECIPE_PERFECT},
+		excluded_recipe_rarities={(RECIPE_PERFECT, Rarity.UNIQUE), },
+
 		ingredient_rarity_whitelist={Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.UNIQUE},
-		phases_included={phase},
+		phases_included={i for i in range(len(GAME_PHASES))},
 		greedy_sets_per_recipe={-1: 500},
-		random_sets_per_recipe={-1: 20000},
-		num_iterations=30,
-		learning_rate=0.2,
+		random_sets_per_recipe={-1: 50000},
+		num_iterations=50,
+		learning_rate=0.15,
 		strategies=["max", "avg", "percentile", "custom"],
 		output_strategy="percentile",
-		percentile_target=98.0,
+		percentile_target=98.5,
 	)
 
-	print("Running initial value iteration...")
-	start_time = time.time()
-	item_values = run_value_iteration(
-		engine=engine,
-		usage_values=usage_values_seed,
-		config=config,
+	print("Running initial value iteration...", flush=True)
+	
+	# Try loading first
+	loaded_data = load_item_values()
+	if loaded_data is not None:
+		item_values = loaded_data['values']
+		# Handle both old and new cache formats
+		cache_raw = loaded_data.get('cache', {})
+		
+		# Check if cache is new format (Dict[int, List[Sequence[int]]])
+		if cache_raw and isinstance(next(iter(cache_raw.values())), list) and isinstance(next(iter(cache_raw.values()))[0], list):
+			global_candidate_pool = cache_raw
+			print(f"Loaded item values and {sum(len(r) for r in global_candidate_pool.values())} cached recipe sets.", flush=True)
+		else:
+			print("Detected old cache format or empty cache. Re-running value iteration.", flush=True)
+			start_time = time.time()
+			item_values, global_candidate_pool = run_value_iteration(
+				engine=engine,
+				usage_values=usage_values_seed,
+				config=config,
+			)
+			print(f"Value iteration complete in {time.time() - start_time:.2f}s", flush=True)
+			save_item_values({'values': item_values, 'cache': global_candidate_pool})
+	else:
+		start_time = time.time()
+		item_values, global_candidate_pool = run_value_iteration(
+			engine=engine,
+			usage_values=usage_values_seed,
+			config=config,
+		)
+		print(f"Value iteration complete in {time.time() - start_time:.2f}s", flush=True)
+		save_item_values({'values': item_values, 'cache': global_candidate_pool})
+
+def send_mock_client_request():
+	"""
+	Send a single mock optimization request to the locally running server.
+	Useful for quick debugging without needing the game client.
+	"""
+	sample_request = {
+		"request_id": "debug-1",
+		"level": 1,
+		# Minimal inventory example – adjust as needed for deeper debugging
+		"transmute_inventory_items": [
+			# Example item; replace type ID / uid with something valid for your setup
+			{"id": STRANGE_ITEM, "uid": 1},
+			{"id": RUSTY_MINING_PICK, "uid": 2},
+			{"id": VOID_VIAL, "uid": 3},
+			{"id": ASSASINATION_ARROW, "uid": 4},
+			{"id": TRAINING_MANUAL, "uid": 5},
+			{"id": YOUNG_THIEF_CLOAK, "uid": 6},
+			{"id": SKULL_TROPHY, "uid": 7},
+			{"id": RING_OF_LUCK, "uid": 8},
+			{"id": SCARAB_AMULET, "uid": 9},
+		],
+		"tower_inventory": [
+			{"id": MAGIC_GLOVES, "uid": 10},
+			{"id": SPIDER_SILK, "uid": 11},
+			{"id": LAND_MINE, "uid": 12},
+			{"id": SCROLL_OF_MYTHS, "uid": 13},
+			{"id": NINJA_GLAIVE, "uid": 14},
+			{"id": BOMB_SHELLS, "uid": 15},
+			{"id": MAGICAL_ESSENCE, "uid": 16},
+			{"id": ORC_WAR_SPEAR, "uid": 17},
+		],
+	}
+
+	data = json.dumps(sample_request).encode("utf-8")
+	url = f"http://127.0.0.1:{PORT}/optimize"
+	req = urllib.request.Request(
+		url,
+		data=data,
+		headers={"Content-Type": "application/json"},
+		method="POST",
 	)
-	print(f"Value iteration complete in {time.time() - start_time:.2f}s")
+
+	print(f"Mock client sending request to {url} ...", flush=True)
+	try:
+		with urllib.request.urlopen(req) as resp:
+			body = resp.read().decode("utf-8")
+			print("Mock client received response:", body, flush=True)
+	except Exception as e:
+		print(f"Mock client error: {e}", flush=True)
 
 class OptimizationHandler(http.server.BaseHTTPRequestHandler):
+	def log_message(self, format, *args):
+		print("%s - - [%s] %s" %
+			  (self.client_address[0],
+			   self.log_date_time_string(),
+			   format % args), flush=True)
+
 	def do_POST(self):
 		if self.path == '/optimize':
 			content_length = int(self.headers['Content-Length'])
@@ -79,12 +168,15 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 				data = json.loads(post_data.decode('utf-8'))
 				response = self.process_optimization(data)
 				
+				response_bytes = json.dumps(response).encode('utf-8')
+				
 				self.send_response(200)
 				self.send_header('Content-type', 'application/json')
+				self.send_header('Content-Length', str(len(response_bytes)))
 				self.end_headers()
-				self.wfile.write(json.dumps(response).encode('utf-8'))
+				self.wfile.write(response_bytes)
 			except Exception as e:
-				print(f"Error processing request: {e}")
+				print(f"Error processing request: {e}", flush=True)
 				self.send_response(500)
 				self.end_headers()
 				self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
@@ -98,12 +190,10 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 		transmute_inventory_items = data.get('transmute_inventory_items', [])
 		tower_inventory_ids = data.get('tower_inventory', [])
 		
-		# Determine phase from level if provided, otherwise use explicit phase or default
+		# Determine phase from level if provided
 		if 'level' in data:
 			level = int(data['level'])
 			phase_idx = get_game_phase_index(level)
-		else:
-			phase_idx = data.get('phase', 5)
 
 		# Helper to convert item list to Inventory (counts of Type IDs)
 		def items_to_inventory(items: List[Dict[str, int]]) -> Inventory:
@@ -128,69 +218,83 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 		for tid, count in tower_counts.items():
 			inventory_for_caps[tid] = inventory_for_caps.get(tid, 0) + count
 
-		# Temporarily update item values context with the full inventory for caps logic
-		# Note: run_value_iteration produced `item_values` which are "Global" values.
-		# Ideally we would use run_state_local_refinement here if we wanted to react 
-		# to caps strictly, but for speed we can pass the inventory_for_caps 
-		# when creating the context for scoring.
-		
-		# However, `list_transmute_actions_for_state` takes `state_inventory` and uses it 
-		# both for availability checks AND potentially for value function context if implemented so.
-		# In the current optimizer implementation:
-		# list_transmute_actions_for_state -> _make_value_func(item_values, ..., state_inventory)
-		#
-		# _make_value_func uses state_inventory to check caps.
-		# So we want `inventory_for_caps` to be passed as `state_inventory` for value calculation purposes,
-		# BUT we want `inventory_for_actions` to be used for `generate_candidate_sets_for_recipe`.
-		
-		# The current `list_transmute_actions_for_state` signature is:
-		# (engine, item_values, state_inventory, ...)
-		# It uses `state_inventory` for both.
-		
-		# To support the split without modifying optimizer.py too much, we can:
-		# Manually run the steps inside list_transmute_actions_for_state here.
-		
 		actions: List[Tuple[int, List[int], float]] = []
 		
-		# This value function uses the CAPS inventory to determine item worth
-		# (e.g. if we have too many of item X on towers + stash, its value drops)
-		from scripts.horadric_cube.optimizer import _make_value_func, generate_candidate_sets_for_recipe, _compute_action_value
+		# Create a lightweight config for requests
+		request_config = OptimizerConfig(
+			recipes_included=config.recipes_included,
+			excluded_recipe_rarities=config.excluded_recipe_rarities,
+			ingredient_rarity_whitelist=config.ingredient_rarity_whitelist,
+			phases_included={phase_idx},
+			# Minimal sampling because we rely on cache
+			greedy_sets_per_recipe={-1: 20}, 
+			random_sets_per_recipe={-1: 0}, # Disable random generation, use cache
+			output_strategy=config.output_strategy,
+			percentile_target=config.percentile_target
+		)
 		
-		value_func = _make_value_func(
+		# Filter the global cache for FEASIBLE recipes based on current inventory
+		filtered_candidates: Dict[int, List[Sequence[int]]] = {}
+		if global_candidate_pool:
+			for rid, candidates in global_candidate_pool.items():
+				# Skip recipes not in config
+				if request_config.recipes_included and rid not in request_config.recipes_included:
+					continue
+				
+				valid_for_inventory = []
+				for S in candidates:
+					# Check if we have enough items in inventory_for_actions
+					# S is list of item IDs. Count them.
+					needed = {}
+					for item_id in S:
+						needed[item_id] = needed.get(item_id, 0) + 1
+					
+					possible = True
+					for item_id, count in needed.items():
+						if inventory_for_actions.get(item_id, 0) < count:
+							possible = False
+							break
+					
+					if possible:
+						valid_for_inventory.append(S)
+				
+				if valid_for_inventory:
+					filtered_candidates[rid] = valid_for_inventory
+
+		# Call the optimizer with our filtered precomputed candidates
+		actions = list_transmute_actions_for_state(
+			engine=engine,
 			item_values=item_values,
+			state_inventory=inventory_for_caps, # Use Caps inventory for value/cap logic
+			state_recipes_available=None,
 			phase=phase_idx,
-			state_inventory=inventory_for_caps, 
+			config=request_config,
+			min_delta=0.0,
+			precomputed_candidates=filtered_candidates 
 		)
 
-		for recipe in engine.recipe_db.recipes.values():
-			recipe_id = recipe.id
-			if config.recipes_included is not None and recipe_id not in config.recipes_included:
-				continue
-
-			# Use ACTIONS inventory (what we actually have in stash/cube) to generate candidates
-			candidate_sets = generate_candidate_sets_for_recipe(
-				engine=engine,
-				recipe_id=recipe_id,
-				phase=phase_idx,
-				config=config,
-				item_values=item_values,
-				state_inventory=inventory_for_actions, 
-			)
-
-			for S in candidate_sets:
-				if not S:
-					continue
-				_, delta = _compute_action_value(
-					engine=engine,
-					recipe=recipe,
-					S=S,
-					phase=phase_idx,
-					value_func=value_func,
-				)
-				if delta > 0.0:
-					actions.append((recipe_id, S, delta))
-
-		actions.sort(key=lambda x: x[2], reverse=True)
+		# Re-verify feasibility against strict inventory_for_actions just to be safe
+		# (Because list_transmute_actions_for_state might generate greedy candidates that use items we don't have enough of if we passed Caps inventory)
+		# Actually, we passed `state_inventory=inventory_for_caps`. 
+		# `generate_candidate_sets_for_recipe` (greedy part) uses `state_inventory`.
+		# So greedy might suggest using items from towers.
+		# We need to filter `actions` to ensure they are performable with `inventory_for_actions`.
+		
+		performable_actions = []
+		for rid, S, delta in actions:
+			needed = {}
+			for item_id in S:
+				needed[item_id] = needed.get(item_id, 0) + 1
+			
+			possible = True
+			for item_id, count in needed.items():
+				if inventory_for_actions.get(item_id, 0) < count:
+					possible = False
+					break
+			if possible:
+				performable_actions.append((rid, S, delta))
+		
+		actions = performable_actions
 
 		# Global tracking of used UIDs to ensure suggested recipes are non-overlapping
 		global_used_uids: Set[int] = set()
@@ -204,17 +308,10 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 				items_by_id[tid] = []
 			items_by_id[tid].append(uid)
 
-		# List of final suggested recipes (flat list of dicts) or grouped?
-		# The original format was by recipe ID.
-		# But now we want a SET of compatible actions.
-		# Let's still return them grouped by recipe ID for UI consistency, 
-		# but ensure that if user executes Action A, Action B is still valid (or was valid at generation time).
-		
 		recipes_output = {}
 		
 		valid_actions_count = 0
-		max_actions = 5 # Total number of actions to suggest across ALL recipes? Or per recipe?
-		# User requested: "return a set of K (5?) recipes that ALL can be executed together"
+		max_actions = 5 
 		
 		for rid, ingredients_type_ids, delta in actions:
 			if valid_actions_count >= max_actions:
@@ -223,11 +320,6 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 			# Try to fulfill the ingredients using ONLY unused UIDs
 			assigned_uids = []
 			possible = True
-			
-			# We need to pick specific UIDs for this action
-			# To be deterministic and optimal, we should probably pick UIDs that are 
-			# "least valuable" elsewhere? Or just any valid UID?
-			# For now, just pick first available that is not in global_used_uids
 			
 			for tid in ingredients_type_ids:
 				tid = int(tid)
@@ -243,19 +335,10 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 				
 				if found_uid is not None:
 					assigned_uids.append(found_uid)
-					# Temporarily mark as used for this action check
-					# (We will commit to global_used_uids only if whole action is possible)
 				else:
 					possible = False
 					break
 			
-			# Double check distinctness within action (already handled by global check logic effectively, 
-			# but ingredients_type_ids could have duplicates of same type)
-			# The loop above picks *one* candidate. If we need 2 of Type A, 
-			# we need to pick 2 DIFFERENT candidates.
-			# The simple loop above might pick the SAME candidate twice if we don't exclude it immediately.
-			
-			# Refined allocation for this action:
 			if possible:
 				# Re-verify with strict consumption tracking for this specific action
 				current_action_uids = []
@@ -298,8 +381,24 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 		return {"recipes": list(recipes_output.values()), "request_id": request_id}
 
 if __name__ == '__main__':
+	print("Starting server script...", flush=True)
 	initialize_engine()
-	with socketserver.TCPServer(("", PORT), OptimizationHandler) as httpd:
-		print(f"Serving at port {PORT}")
+	
+	# Enable address reuse
+	socketserver.TCPServer.allow_reuse_address = True
+	
+	# Use 0.0.0.0 to bind to all interfaces, ensuring we catch requests from localhost/127.0.0.1/::1
+	with socketserver.TCPServer(("0.0.0.0", PORT), OptimizationHandler) as httpd:
+		print(f"Serving at port {PORT}", flush=True)
+		
+		# If launched with --debug-client, spin up a background mock client
+		# that sends a single request once the server is listening.
+		if '--debug-client' in sys.argv or True:
+			def _run_mock_client():
+				# Small delay to ensure the server socket is ready
+				time.sleep(1.0)
+				send_mock_client_request()
+			
+			threading.Thread(target=_run_mock_client, daemon=True).start()
+		
 		httpd.serve_forever()
-
