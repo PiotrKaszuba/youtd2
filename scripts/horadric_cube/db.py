@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Union, Optional, Set
 
@@ -12,12 +12,33 @@ from .constants import ITEM_PROPERTIES_FILE, RECIPE_PROPERTIES_FILE, ITEM_ID
 @dataclass(frozen=True)
 class ItemDatabase:
 	items: Dict[int, Item]
+	_hash: Optional[int] = field(default=None, repr=False, compare=False)
+
+	def __hash__(self) -> int:
+		if self._hash is None:
+			# Hash based on sorted keys and item content hashes (if Item is hashable)
+			# Assuming Item is immutable or we trust it enough for this session.
+			# We use a frozenset of items for order independence.
+			# Since Item doesn't implement __hash__ yet, we might need to or use id/content.
+			# Actually, let's just hash the sorted IDs for filter identification, 
+			# and maybe length.
+			# A truly safe hash would hash all item contents.
+			# For now, let's hash sorted item IDs as a proxy for "filtered subset".
+			# If item *properties* change, this won't catch it, but for filtering it's fine.
+			self.__object_setattr__("_hash", hash(tuple(sorted(self.items.keys()))))
+		return self._hash
+
+	def __object_setattr__(self, name, value):
+		# Helper for frozen dataclass setattr
+		object.__setattr__(self, name, value)
 
 	def filter_items(
 		self,
 		level_min: Optional[int] = None,
 		level_max: Optional[int] = None,
 		rarity_whitelist: Optional[Set[Rarity]] = None,
+		include_permanent: bool = True,
+		include_usable: bool = True,
 		remove_item_ids: Set[ITEM_ID] = None ) -> ItemDatabase:
 		
 		filtered_items: Dict[int, Item] = {}
@@ -29,6 +50,10 @@ class ItemDatabase:
 			if level_max and item.required_wave_level > level_max:
 				continue
 			if rarity_whitelist and item.rarity not in rarity_whitelist:
+				continue
+			if not include_permanent and item.is_permanent:
+				continue
+			if not include_usable and item.is_usable:
 				continue
 			filtered_items[item_id] = item
 		return ItemDatabase(items=filtered_items)
