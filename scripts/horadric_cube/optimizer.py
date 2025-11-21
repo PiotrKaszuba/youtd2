@@ -535,6 +535,7 @@ def _compute_action_value(
 	S: Sequence[ITEM_ID],
 	phase: GAME_PHASE,
 	value_func,
+	avg_per_ingredient: bool = False,
 ) -> Tuple[float, float]:
 	"""
 	Compute (expected_result_value, delta) for a single (recipe, S, phase).
@@ -590,6 +591,9 @@ def _compute_action_value(
 
 	expected_result_value = recipe.result_count * expected_per_slot
 	delta = expected_result_value - ingredient_cost
+	if avg_per_ingredient:
+		expected_result_value = expected_result_value / float(max(len(S), 1))
+		delta = delta / float(max(len(S), 1))
 	return expected_result_value, delta
 
 
