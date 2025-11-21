@@ -72,6 +72,64 @@ class ItemValue:
 	transmute_values_by_strategy: Optional[Dict[str, GAME_PHASE_VALUE_DICT]] = None
 	usage_cap: Optional[Tuple[int, GAME_PHASE_VALUE]] = None
 
+	def update_keep_transmute_value(
+		self,
+		usage_value: GAME_PHASE_VALUE_DICT,
+		inventory: Optional[Inventory] = None,
+		usage_caps: Optional[Dict[ITEM_ID, Tuple[int, GAME_PHASE_VALUE]]] = None,
+		usage_cap_single: Optional[Tuple[int, GAME_PHASE_VALUE]] = None,
+	) -> ItemValue:
+		"""
+		Update the ItemValue with new usage value and caps, keeping the transmute value.
+		"""
+		usage_value_full = ItemValue.determine_usage_value(self.item_id, usage_value, usage_caps, usage_cap_single, inventory)
+		final_cap = ItemValue.determine_cap(self.item_id, usage_caps, usage_cap_single)
+		return ItemValue(item_id=self.item_id, usage_value=usage_value_full, transmute_value=self.transmute_value, transmute_values_by_strategy=self.transmute_values_by_strategy, usage_cap=final_cap)
+
+
+	@staticmethod
+	def determine_cap(
+		item_id: ITEM_ID,
+		usage_caps: Optional[Dict[ITEM_ID, Tuple[int, GAME_PHASE_VALUE]]] = None,
+		usage_cap_single: Optional[Tuple[int, GAME_PHASE_VALUE]] = None,
+	) -> Tuple[int, GAME_PHASE_VALUE]:
+		"""
+		Determine the final cap for a given item ID.
+		"""
+		# Resolve cap from direct argument or dict lookup
+		if usage_cap_single is None and usage_caps is not None:
+			return usage_caps.get(item_id)
+		return usage_cap_single
+
+	@staticmethod
+	def determine_usage_value(
+		item_id: ITEM_ID,
+		usage_value: GAME_PHASE_VALUE_DICT,
+		usage_caps: Optional[Dict[ITEM_ID, Tuple[int, GAME_PHASE_VALUE]]] = None,
+		usage_cap_single: Optional[Tuple[int, GAME_PHASE_VALUE]] = None,
+		inventory: Optional[Inventory] = None,
+	) -> GAME_PHASE_VALUE_DICT:
+		"""
+		Determine the final usage value for a given item ID.
+		"""
+		if usage_value is None:
+			usage_value = {phase: 0.0 for phase in range(len(GAME_PHASES))}
+		else:
+			usage_value = usage_value.copy()
+		
+		base_usage_value = usage_value.pop(-1, 0.0)
+		usage_value_full = {phase: base_usage_value + usage_value.get(phase, 0.0) for phase in range(len(GAME_PHASES))}
+		
+		final_cap = ItemValue.determine_cap(item_id, usage_caps, usage_cap_single)
+
+		# Apply inventory-aware caps if requested.
+		if inventory is not None and final_cap is not None:
+			count = inventory.get(item_id, 0)
+			max_count, overflow_val = final_cap
+			if max_count is not None and count >= max_count:
+				usage_value_full = {phase_idx: overflow_val for phase_idx in range(len(GAME_PHASES))}
+		return usage_value_full
+
 	@staticmethod
 	def from_data(
 		item_id: ITEM_ID,
@@ -89,34 +147,11 @@ class ItemValue:
 		  contains at least max_count copies of this item, usage values are
 		  collapsed to the configured overflow value (default 0.0 when not set).
 		"""
-		if usage_value is None:
-			usage_value = {phase: 0.0 for phase in range(len(GAME_PHASES))}
-		else:
-			# take copy to avoid modifying the original
-			usage_value = usage_value.copy()
-
-		# get and remove base value (applied to all phases)
-		base_usage_value = usage_value.pop(-1, 0.0)
-
-		usage_value_full = {
-			phase_idx: base_usage_value + usage_value.get(phase_idx, 0.0)
-			for phase_idx in range(len(GAME_PHASES))
-		}
-
-		# Resolve cap from direct argument or dict lookup
-		final_cap = usage_cap_single
-		if final_cap is None and usage_caps is not None:
-			final_cap = usage_caps.get(item_id)
-
-		# Apply inventory-aware caps if requested.
-		if inventory is not None and final_cap is not None:
-			count = inventory.get(item_id, 0)
-			max_count, overflow_val = final_cap
-			if max_count is not None and count >= max_count:
-				usage_value_full = {phase_idx: overflow_val for phase_idx in range(len(GAME_PHASES))}
-
+		usage_value_full = ItemValue.determine_usage_value(item_id, usage_value, usage_caps, usage_cap_single, inventory)
+		final_cap = ItemValue.determine_cap(item_id, usage_caps, usage_cap_single)
 		transmute_value_full = {phase_idx: 0.0 for phase_idx in range(len(GAME_PHASES))}
-		return ItemValue(item_id, usage_value_full, transmute_value_full, final_cap)
+		return ItemValue(item_id, usage_value_full, transmute_value_full, None, final_cap)
+
 
 	# value is the maximum of usage value and transmute value for a given phase index
 	def get_value(self, game_phase: GAME_PHASE) -> GAME_PHASE_VALUE:
@@ -440,7 +475,7 @@ USAGE_ITEM_VALUES: Dict[ITEM_ID, Tuple[GAME_PHASE_VALUE_DICT, Optional[Tuple[int
 	## ITEM FIND  / QUALITY
 	# Common items
 	RUSTY_MINING_PICK: ({0: 0.1, 1: 0.1, 2: 0.05}, (1, 0.0)),
-	YOUNG_THIEF_CLOAK: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (1, 0.0)),
+	YOUNG_THIEF_CLOAK: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0)),
 	OLD_CRYSTAL_BALL: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0)),
 	PIRATE_MAP: ({0: 0.55, 1: 0.55, 2: 0.375, 3: 0.275, 4: 0.125, 5: 0.075,}, (2, 0.0)),
 	RUNED_WOOD: ({-1: 0.35, 4: -0.1, 5: -0.15, 6: -0.25, 7: -0.35, 8: -0.35}, (2, 0.0)),
@@ -805,11 +840,11 @@ USAGE_ITEM_VALUES: Dict[ITEM_ID, Tuple[GAME_PHASE_VALUE_DICT, Optional[Tuple[int
 }
 
 # add +1 to all usage_caps
-for item_id, val in USAGE_ITEM_VALUES.items():
-	usage_val, usage_cap = val
-	if usage_cap is not None:
-		max_count, overflow_value = usage_cap
-		USAGE_ITEM_VALUES[item_id] = (usage_val, (max_count + 1, overflow_value))
+# for item_id, val in USAGE_ITEM_VALUES.items():
+# 	usage_val, usage_cap = val
+# 	if usage_cap is not None:
+# 		max_count, overflow_value = usage_cap
+# 		USAGE_ITEM_VALUES[item_id] = (usage_val, (max_count + 1, overflow_value))
 
 __all__ = [
 	"ROOT_DIR",

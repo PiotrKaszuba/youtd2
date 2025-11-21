@@ -131,6 +131,23 @@ def _init_item_values(
 		)
 	return item_values
 
+def _update_item_values(
+	item_values: Dict[ITEM_ID, ItemValue],
+	usage_values: Dict[ITEM_ID, Any],
+	inventory: Optional[Inventory] = None,
+) -> Dict[ITEM_ID, ItemValue]:
+	item_values_new: Dict[ITEM_ID, ItemValue] = {}
+	for item_id, iv in item_values.items():
+		usage_entry = usage_values.get(item_id)
+		usage_val = None
+		usage_cap = None
+		if isinstance(usage_entry, tuple):
+			usage_val, usage_cap = usage_entry
+		elif isinstance(usage_entry, dict):
+			usage_val = usage_entry
+		item_values_new[item_id] = iv.update_keep_transmute_value(usage_val, inventory, usage_cap_single=usage_cap)
+	return item_values_new
+	
 
 
 
@@ -138,8 +155,6 @@ def _init_item_values(
 def _build_candidate_pools(
 	engine: HoradricEngine,
 	config: OptimizerConfig,
-	item_values: Dict[ITEM_ID, ItemValue],
-	phase: GAME_PHASE,
 	state_inventory: Optional[Inventory] = None,
 	value_func: Optional[Any] = None,
 ) -> Tuple[List[int], List[int]]:
@@ -174,10 +189,7 @@ def _build_candidate_pools(
 				usable_pool.append(item.id)
 
 	# Sort by current value in this phase to prioritize low-value ingredients.
-	if value_func is None:
-		permanent_pool.sort(key=lambda i: item_values[i].get_value(phase))
-		usable_pool.sort(key=lambda i: item_values[i].get_value(phase))
-	else:
+	if value_func is not None:
 		permanent_pool.sort(key=lambda i: float(value_func(i)))
 		usable_pool.sort(key=lambda i: float(value_func(i)))
 
@@ -296,9 +308,7 @@ def _distribute_budgets_by_rarity(
 def generate_greedy_sets_for_recipe(
 	engine: HoradricEngine,
 	recipe_id: int,
-	phase: GAME_PHASE,
 	config: OptimizerConfig,
-	item_values: Dict[ITEM_ID, ItemValue],
 	state_inventory: Optional[Inventory] = None,
 	value_func: Optional[Any] = None,
 ) -> List[Sequence[ITEM_ID]]:
@@ -306,8 +316,6 @@ def generate_greedy_sets_for_recipe(
 	permanent_pool, usable_pool = _build_candidate_pools(
 		engine=engine,
 		config=config,
-		item_values=item_values,
-		phase=phase,
 		state_inventory=state_inventory,
 		value_func=value_func,
 	)
@@ -374,9 +382,7 @@ def generate_greedy_sets_for_recipe(
 def generate_random_sets_for_recipe(
 	engine: HoradricEngine,
 	recipe_id: int,
-	phase: GAME_PHASE,
 	config: OptimizerConfig,
-	item_values: Dict[ITEM_ID, ItemValue],
 	state_inventory: Optional[Inventory] = None,
 ) -> List[Sequence[ITEM_ID]]:
 	# Prefer the authoritative recipe_db
@@ -385,8 +391,6 @@ def generate_random_sets_for_recipe(
 	permanent_pool, usable_pool = _build_candidate_pools(
 		engine=engine,
 		config=config,
-		item_values=item_values,
-		phase=phase,
 		state_inventory=state_inventory,
 	)
 	n_perm = recipe.permanent_count
@@ -467,6 +471,7 @@ def generate_candidate_sets_for_recipe(
 	config: OptimizerConfig,
 	item_values: Dict[ITEM_ID, ItemValue],
 	state_inventory: Optional[Inventory] = None,
+	value_func: Optional[Any] = None,
 ) -> List[Sequence[ITEM_ID]]:
 	"""
 	Generate candidate ingredient sets for a recipe and phase, honoring the
@@ -485,17 +490,14 @@ def generate_candidate_sets_for_recipe(
 	greedy = generate_greedy_sets_for_recipe(
 		engine=engine,
 		recipe_id=recipe_id,
-		phase=phase,
 		config=config,
-		item_values=item_values,
 		state_inventory=state_inventory,
+		value_func=value_func,
 	)
 	randoms = generate_random_sets_for_recipe(
 		engine=engine,
 		recipe_id=recipe_id,
-		phase=phase,
 		config=config,
-		item_values=item_values,
 		state_inventory=state_inventory,
 	)
 	# Merge and de-dup
@@ -648,66 +650,60 @@ def _run_value_iteration_core(
 	alpha = config.learning_rate
 	phase_indices = config.phases_included if config.phases_included is not None else range(len(GAME_PHASES))
 
-	# Precompute random candidate cache once for all phases/recipes
-	random_cache: Dict[int, Dict[int, List[CachedCandidate]]] = {}
-	for phase in phase_indices:
-		random_cache[phase] = {}
-		for recipe in engine.recipe_db.recipes.values():
-			recipe_id = recipe.id
-			if state_recipes_available is not None and recipe_id not in state_recipes_available:
+	# Precompute random candidate cache once for all recipes
+	random_cache: Dict[int, List[CachedCandidate]] = {}
+	for recipe in engine.recipe_db.recipes.values():
+		recipe_id = recipe.id
+		if state_recipes_available is not None and recipe_id not in state_recipes_available:
+			continue
+		if config.recipes_included is not None and recipe_id not in config.recipes_included:
+			continue
+		random_sets = generate_random_sets_for_recipe(
+			engine=engine,
+			recipe_id=recipe_id,
+			config=config,
+			state_inventory=state_inventory,
+		)
+
+		print(f"Random sets for recipe {recipe_id}: {len(random_sets)}")
+
+		cached_list: List[CachedCandidate] = []
+		for S in random_sets:
+			if not S:
 				continue
-			if config.recipes_included is not None and recipe_id not in config.recipes_included:
+			permanent_levels: List[int] = []
+			ingredient_rarity = Rarity.COMMON
+			for item_id in S:
+				item = engine.item_db.items.get(int(item_id))
+				if item is not None and item.is_permanent:
+					permanent_levels.append(item.required_wave_level)
+					ingredient_rarity = item.rarity
+			
+			avg_permanent_level = int(sum(permanent_levels) // max(len(permanent_levels), 1))
+			
+			result_rarity = ingredient_rarity + recipe.rarity_change
+			if result_rarity < Rarity.COMMON or result_rarity > Rarity.UNIQUE:
 				continue
-			random_sets = generate_random_sets_for_recipe(
-				engine=engine,
-				recipe_id=recipe_id,
-				phase=phase,
-				config=config,
-				item_values=item_values,
-				state_inventory=state_inventory,
+			dist = get_single_result_distribution(
+				recipe=recipe,
+				item_db=engine.item_db,
+				avg_permanent_level=avg_permanent_level,
+				result_rarity=result_rarity,
+				explicit_ingredient_ids=S,
 			)
-
-			print(f"Random sets for recipe {recipe_id}: {len(random_sets)}")
-
-			cached_list: List[CachedCandidate] = []
-			for S in random_sets:
-				if not S:
-					continue
-				permanent_levels: List[int] = []
-				ingredient_rarity = Rarity.COMMON
-				for item_id in S:
-					item = engine.item_db.items.get(int(item_id))
-					if item is not None and item.is_permanent:
-						permanent_levels.append(item.required_wave_level)
-						ingredient_rarity = item.rarity
-				if permanent_levels:
-					avg_permanent_level = int(sum(permanent_levels) // max(len(permanent_levels), 1))
-				else:
-					lvl_min, lvl_max = _get_phase_level_bounds(phase)
-					avg_permanent_level = (lvl_min + lvl_max) // 2
-				result_rarity = ingredient_rarity + recipe.rarity_change
-				if result_rarity < Rarity.COMMON or result_rarity > Rarity.UNIQUE:
-					continue
-				dist = get_single_result_distribution(
-					recipe=recipe,
-					item_db=engine.item_db,
-					avg_permanent_level=avg_permanent_level,
-					result_rarity=result_rarity,
-					explicit_ingredient_ids=S,
-				)
-				cached_list.append(CachedCandidate(
-					recipe_id=recipe_id,
-					ingredients=tuple(sorted(S)),
-					result_rarity=result_rarity,
-					avg_permanent_level=avg_permanent_level,
-					result_distribution=dist,
-				))
-			random_cache[phase][recipe_id] = cached_list
+			cached_list.append(CachedCandidate(
+				recipe_id=recipe_id,
+				ingredients=tuple(sorted(S)),
+				result_rarity=result_rarity,
+				avg_permanent_level=avg_permanent_level,
+				result_distribution=dist,
+			))
+		random_cache[recipe_id] = cached_list
 
 	for _ in tqdm(range(num_iterations)):
-		for phase in phase_indices:
-			# Build greedy candidates fresh per iteration (based on current item_values face values).
-			greedy_cached_by_recipe: Dict[int, List[CachedCandidate]] = {}
+		greedy_cached_by_phase_and_recipe: Dict[int, Dict[int, List[CachedCandidate]]] = {}
+		for phase in phase_indices:			
+			greedy_cached_by_phase_and_recipe[phase] = {}
 			for recipe in engine.recipe_db.recipes.values():
 				recipe_id = recipe.id
 				if state_recipes_available is not None and recipe_id not in state_recipes_available:
@@ -717,9 +713,7 @@ def _run_value_iteration_core(
 				greedy_sets = generate_greedy_sets_for_recipe(
 					engine=engine,
 					recipe_id=recipe_id,
-					phase=phase,
 					config=config,
-					item_values=item_values,
 					state_inventory=state_inventory,
 					value_func=lambda i, T_tables=T_tables, U=U, phase=phase, config=config: max(
 						U[i].get(phase, 0.0),
@@ -727,6 +721,7 @@ def _run_value_iteration_core(
 					),
 				)
 				cached_list: List[CachedCandidate] = []
+				greedy_cached_by_phase_and_recipe[phase][recipe_id] = cached_list
 				for S in greedy_sets:
 					if not S:
 						continue
@@ -756,19 +751,38 @@ def _run_value_iteration_core(
 						avg_permanent_level=avg_permanent_level,
 						result_distribution=dist,
 					))
-				greedy_cached_by_recipe[recipe_id] = cached_list
 
-			# Evaluate per strategy
-			for strategy in strategies:
-				T = T_tables[strategy.name()]
+		# Evaluate per strategy
+		for strategy in strategies:
+			T = T_tables[strategy.name()]
 
-				def V(item_id: ITEM_ID) -> float:
-					return max(U[item_id].get(phase, 0.0), T[item_id].get(phase, 0.0))
+			def V(item_id: ITEM_ID, phase: GAME_PHASE) -> float:
+				return max(U[item_id].get(phase, 0.0), T[item_id].get(phase, 0.0))
 
-				candidate_values_by_item: Dict[ITEM_ID, List[float]] = {item_id: [] for item_id in item_values.keys()}
+			candidate_values_by_phase_and_item: Dict[int, Dict[ITEM_ID, List[float]]] = {phase: {item_id: [] for item_id in item_values.keys()} for phase in phase_indices}
 
-				# Random cached
-				for recipe_id, cc_list in random_cache.get(phase, {}).items():
+			# Random cached
+			for recipe_id, cc_list in random_cache.items():
+				recipe = engine.recipe_db.recipes[recipe_id]
+				result_count = recipe.result_count
+				for cc in cc_list:
+					S = list(cc.ingredients)
+					if not S:
+						continue
+					expected_per_slot_per_phase: Dict[int, float] = {phase: 0.0 for phase in phase_indices}
+					for out_id, prob in cc.result_distribution.items():
+						for phase in phase_indices:
+							expected_per_slot_per_phase[phase] += prob * V(int(out_id), phase)
+					
+					expected_result_value_per_phase: Dict[int, float] = {phase: result_count * expected_per_slot_per_phase[phase] for phase in phase_indices}
+					per_item_candidate_per_phase: Dict[int, float] = {phase: expected_result_value_per_phase[phase] / float(max(len(S), 1)) for phase in phase_indices}
+					for i in S:
+						for phase in phase_indices:
+							candidate_values_by_phase_and_item[phase][i].append(per_item_candidate_per_phase[phase])
+
+			# Greedy cached
+			for phase in phase_indices:
+				for recipe_id, cc_list in greedy_cached_by_phase_and_recipe[phase].items():
 					recipe = engine.recipe_db.recipes[recipe_id]
 					result_count = recipe.result_count
 					for cc in cc_list:
@@ -777,35 +791,20 @@ def _run_value_iteration_core(
 							continue
 						expected_per_slot = 0.0
 						for out_id, prob in cc.result_distribution.items():
-							expected_per_slot += prob * V(int(out_id))
-						
+							expected_per_slot += prob * V(int(out_id), phase)
 						expected_result_value = result_count * expected_per_slot
 						per_item_candidate = expected_result_value / float(max(len(S), 1))
 						for i in S:
-							candidate_values_by_item[i].append(per_item_candidate)
+							candidate_values_by_phase_and_item[phase][i].append(per_item_candidate)
 
-				# Greedy cached
-				for recipe_id, cc_list in greedy_cached_by_recipe.items():
-					recipe = engine.recipe_db.recipes[recipe_id]
-					result_count = recipe.result_count
-					for cc in cc_list:
-						S = list(cc.ingredients)
-						if not S:
-							continue
-						expected_per_slot = 0.0
-						for out_id, prob in cc.result_distribution.items():
-							expected_per_slot += prob * V(int(out_id))
-						expected_result_value = result_count * expected_per_slot
-						per_item_candidate = expected_result_value / float(max(len(S), 1))
-						for i in S:
-							candidate_values_by_item[i].append(per_item_candidate)
-
-				# Soft update per item
+			# Soft update per item
+			for ph in phase_indices:
 				for item_id in item_values.keys():
-					old_t = T[item_id].get(phase, 0.0)
-					target = strategy.calculate_next_value(old_t, candidate_values_by_item.get(item_id, []))
-					T[item_id][phase] = (1.0 - alpha) * old_t + alpha * target
-				T_tables[strategy.name()] = T
+					old_t = T[item_id].get(ph, 0.0)
+					candidates = candidate_values_by_phase_and_item[ph].get(item_id, [])
+					target = strategy.calculate_next_value(old_t, candidates)
+					T[item_id][ph] = (1.0 - alpha) * old_t + alpha * target
+			T_tables[strategy.name()] = T
 
 	# Build final ItemValue objects with learned T.
 	final_item_values: Dict[ITEM_ID, ItemValue] = {}
