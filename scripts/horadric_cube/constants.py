@@ -40,6 +40,27 @@ def get_game_phase_index(level: WAVE_LEVEL) -> GAME_PHASE:
 			return i
 	return len(GAME_PHASES) - 1  # index of last phase
 
+def get_phase_level_bounds(phase: GAME_PHASE) -> Tuple[int, int]:
+	"""
+	Derive an approximate (lvl_min, lvl_max) range for a given phase index.
+
+	Phases are defined by GAME_PHASES thresholds; the index refers to the
+	position in that list.
+	"""
+	if phase < 0 or phase >= len(GAME_PHASES):
+		# Fallback to a wide range if phase index is out of bounds.
+		return 0, 1000
+
+	if phase == 0:
+		lvl_min = 0
+	else:
+		prev = GAME_PHASES[phase - 1]
+		lvl_min = 0 if not np.isfinite(prev) else int(prev) + 1
+
+	current = GAME_PHASES[phase]
+	lvl_max = 1000 if not np.isfinite(current) else int(current)
+
+	return lvl_min, lvl_max
 
 @dataclass(frozen=True)
 class ItemValue:
