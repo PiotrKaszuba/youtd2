@@ -3,8 +3,6 @@ import socketserver
 import json
 import sys
 import time
-import threading
-import urllib.request
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Set, Sequence
 
@@ -16,10 +14,6 @@ from scripts.horadric_cube.optimizer import (
 	OptimizerConfig,
 	run_value_iteration,
 	list_transmute_actions_for_state,
-	save_item_values,
-	load_item_values,
-	cached_get_single_result_distribution,
-	_compute_action_value,
 )
 from scripts.horadric_cube.constants import (
 	USAGE_ITEM_VALUES,
@@ -35,11 +29,10 @@ PORT = 8003
 # Global engine and values, initialized on startup
 engine: Optional[HoradricEngine] = None
 item_values: Optional[Dict[int, Any]] = None
-global_candidate_pool: Optional[Dict[int, List[Sequence[int]]]] = None
 config: Optional[OptimizerConfig] = None
 
 def initialize_engine():
-	global engine, item_values, global_candidate_pool, config
+	global engine, item_values, config
 	print("Initializing Horadric Engine...", flush=True)
 	engine = HoradricEngine.create_horadric_engine()
 	
@@ -70,37 +63,13 @@ def initialize_engine():
 	)
 
 	print("Running initial value iteration...", flush=True)
-	
-	# Try loading first
-	loaded_data = load_item_values()
-	if loaded_data is not None:
-		item_values = loaded_data['values']
-		# Handle both old and new cache formats
-		cache_raw = loaded_data.get('cache', {})
-		
-		# Check if cache is new format (Dict[int, List[Sequence[int]]])
-		if cache_raw and isinstance(next(iter(cache_raw.values())), list) and isinstance(next(iter(cache_raw.values()))[0], list):
-			global_candidate_pool = cache_raw
-			print(f"Loaded item values and {sum(len(r) for r in global_candidate_pool.values())} cached recipe sets.", flush=True)
-		else:
-			print("Detected old cache format or empty cache. Re-running value iteration.", flush=True)
-			start_time = time.time()
-			item_values, global_candidate_pool = run_value_iteration(
-				engine=engine,
-				usage_values=usage_values_seed,
-				config=config,
-			)
-			print(f"Value iteration complete in {time.time() - start_time:.2f}s", flush=True)
-			save_item_values({'values': item_values, 'cache': global_candidate_pool})
-	else:
-		start_time = time.time()
-		item_values, global_candidate_pool = run_value_iteration(
-			engine=engine,
-			usage_values=usage_values_seed,
-			config=config,
-		)
-		print(f"Value iteration complete in {time.time() - start_time:.2f}s", flush=True)
-		save_item_values({'values': item_values, 'cache': global_candidate_pool})
+	start_time = time.time()
+	item_values = run_value_iteration(
+		engine=engine,
+		usage_values=usage_values_seed,
+		config=config,
+	)
+	print(f"Value iteration complete in {time.time() - start_time:.2f}s")
 
 def send_mock_client_request():
 	"""
@@ -110,7 +79,7 @@ def send_mock_client_request():
 	sample_request = {
 		"request_id": "debug-1",
 		"level": 1,
-		# Minimal inventory example â€“ adjust as needed for deeper debugging
+		# Minimal inventory example – adjust as needed for deeper debugging
 		"transmute_inventory_items": [
 			# Example item; replace type ID / uid with something valid for your setup
 			{"id": STRANGE_ITEM, "uid": 1},
@@ -151,6 +120,7 @@ def send_mock_client_request():
 			print("Mock client received response:", body, flush=True)
 	except Exception as e:
 		print(f"Mock client error: {e}", flush=True)
+
 
 class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 	def log_message(self, format, *args):
