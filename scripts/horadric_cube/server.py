@@ -78,8 +78,8 @@ def initialize_engine():
 		percentile_target=97.5,
 		custom_strategy_weights={
 			"max": 0,
-			"avg": 0.4,
-			"pct": 0.6,
+			"avg": 0.2,
+			"pct": 0.8,
 		},
 	)
 
@@ -252,6 +252,7 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 					S=S,
 					phase=phase_idx,
 					value_func=value_func,
+					avg_per_ingredient=True,
 				)
 				# if delta <= 0.0:
 				# 	continue
