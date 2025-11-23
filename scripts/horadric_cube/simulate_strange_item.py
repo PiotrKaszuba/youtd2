@@ -69,7 +69,8 @@ def strange_item_usage_from_T_table(
 
 
 if __name__ == "__main__":
-	res = strange_item_per_phase_count(350, 24)
+	res = strange_item_per_phase_count(300, 24)
+
 	for k,v in res.items():
-		print(k, v)
+		print(k, v, (sum(res[k].values())))
 	# print(strange_item_per_phase_count(350, 30))
