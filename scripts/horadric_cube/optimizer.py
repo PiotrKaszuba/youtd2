@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -126,6 +126,19 @@ class CustomStrategy(ValueStrategy):
 		else:
 			pct_v = 0.0
 		return (max_v + avg_v + pct_v) / float(max(len(weights.values()), 1))
+
+
+IterationHook = Callable[
+	[
+		int,  # iteration index
+		ValueStrategy,
+		Dict[ITEM_ID, Dict[GAME_PHASE, float]],  # U
+		Dict[ITEM_ID, Dict[GAME_PHASE, float]],  # T for current strategy
+		Callable[[ITEM_ID, GAME_PHASE], float],  # V(item_id, phase)
+		Dict[int, Dict[ITEM_ID, List[float]]],  # candidate values
+	],
+	None,
+]
 
 
 def _init_item_values(
@@ -672,12 +685,15 @@ def run_value_iteration(
 	engine: HoradricEngine,
 	usage_values: Dict[ITEM_ID, Any],
 	config: OptimizerConfig,
+	pre_iteration_fn: Optional[IterationHook] = None,
+	post_iteration_fn: Optional[IterationHook] = None,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Global value iteration to learn absolute transmute values T[i, phase].
 
 	This is inventory-agnostic but respects OptimizerConfig constraints on
-	recipes and ingredients.
+	recipes and ingredients. Optional callbacks can inspect or adjust U/T/V
+	just before and after each strategy update per iteration.
 	"""
 	item_values = _init_item_values(engine.item_db, usage_values)
 
@@ -716,6 +732,8 @@ def run_value_iteration(
 		num_iterations=config.num_iterations,
 		state_inventory=None,
 		state_recipes_available=None,
+		pre_iteration_fn=pre_iteration_fn,
+		post_iteration_fn=post_iteration_fn,
 	)
 
 
@@ -729,6 +747,8 @@ def _run_value_iteration_core(
 	num_iterations: int,
 	state_inventory: Optional[Inventory],
 	state_recipes_available: Optional[Set[int]],
+	pre_iteration_fn: Optional[IterationHook] = None,
+	post_iteration_fn: Optional[IterationHook] = None,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Shared core for global and state-local value iteration.
@@ -737,6 +757,8 @@ def _run_value_iteration_core(
 	- U/T: usage and transmute tables to be updated in-place.
 	- num_iterations: number of sweeps over all configured phases.
 	- state_inventory / state_recipes_available: restrict actions in state-local mode.
+	- pre_iteration_fn / post_iteration_fn: optional callbacks invoked before and after
+	  each strategy update within an iteration.
 	"""
 	alpha = config.learning_rate
 	phase_indices = config.phases_included if config.phases_included is not None else range(len(GAME_PHASES))
@@ -791,7 +813,7 @@ def _run_value_iteration_core(
 			))
 		random_cache[recipe_id] = cached_list
 
-	for _ in tqdm(range(num_iterations)):
+	for iteration_idx in tqdm(range(num_iterations)):
 		greedy_cached_by_phase_and_recipe: Dict[int, Dict[int, List[CachedCandidate]]] = {}
 		for phase in phase_indices:			
 			greedy_cached_by_phase_and_recipe[phase] = {}
@@ -852,6 +874,16 @@ def _run_value_iteration_core(
 
 			candidate_values_by_phase_and_item: Dict[int, Dict[ITEM_ID, List[float]]] = {phase: {item_id: [] for item_id in item_values.keys()} for phase in phase_indices}
 
+			if pre_iteration_fn is not None:
+				pre_iteration_fn(
+					iteration_idx,
+					strategy,
+					U,
+					T,
+					V,
+					candidate_values_by_phase_and_item,
+				)
+
 			# Random cached
 			for recipe_id, cc_list in random_cache.items():
 				recipe = engine.recipe_db.recipes[recipe_id]
@@ -897,6 +929,16 @@ def _run_value_iteration_core(
 					T[item_id][ph] = (1.0 - alpha) * old_t + alpha * target
 			T_tables[strategy.name()] = T
 
+			if post_iteration_fn is not None:
+				post_iteration_fn(
+					iteration_idx,
+					strategy,
+					U,
+					T,
+					V,
+					candidate_values_by_phase_and_item,
+				)
+
 	# Build final ItemValue objects with learned T.
 	final_item_values: Dict[ITEM_ID, ItemValue] = {}
 	# Select output face strategy
@@ -929,6 +971,8 @@ def run_state_local_refinement(
 	config: OptimizerConfig,
 	extra_iterations: int = 10,
 	new_usage_values: Optional[Dict[ITEM_ID, Any]] = None,
+	pre_iteration_fn: Optional[IterationHook] = None,
+	post_iteration_fn: Optional[IterationHook] = None,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Refine T/V for a specific state, using global_item_values as initialization.
@@ -1003,6 +1047,8 @@ def run_state_local_refinement(
 		num_iterations=extra_iterations,
 		state_inventory=state_inventory,
 		state_recipes_available=state_recipes_available,
+		pre_iteration_fn=pre_iteration_fn,
+		post_iteration_fn=post_iteration_fn,
 	)
 
 
@@ -1150,6 +1196,7 @@ def list_transmute_actions_for_state(
 
 __all__ = [
 	"OptimizerConfig",
+	"IterationHook",
 	"run_value_iteration",
 	"run_state_local_refinement",
 	"rank_items_by_transmute_gain",

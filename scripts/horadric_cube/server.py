@@ -30,6 +30,7 @@ from scripts.horadric_cube.constants import (
 	SPIDER_SILK, ORC_WAR_SPEAR, MAGICAL_ESSENCE, BOMB_SHELLS, NINJA_GLAIVE, SCROLL_OF_MYTHS, LAND_MINE, ItemValue,
 )
 from scripts.horadric_cube.models import Rarity
+from scripts.horadric_cube.simulate_strange_item import strange_item_usage_from_T_table
 
 PORT = 8003
 
@@ -39,7 +40,28 @@ item_values: Optional[Dict[int, Any]] = None
 config: Optional[OptimizerConfig] = None
 
 # item values file name
-ITEM_VALUES_FILE = "item_values.pkl"
+ITEM_VALUES_FILE = "item_values_new.pkl"
+STRANGE_ITEM_LEVEL_STOP = 350
+STRANGE_ITEM_STOP_AT = 24
+STRANGE_ITEM_DISCOUNT = 0.99
+
+
+def _make_strange_item_hooks(target_strategy: Optional[str]):
+	def _pre(iteration_idx: int, strategy, U, T, V, candidate_values_by_phase_and_item):
+		if target_strategy is not None and strategy.name() != target_strategy:
+			return
+		U[STRANGE_ITEM] = strange_item_usage_from_T_table(
+			T_table=T,
+			level_stop=STRANGE_ITEM_LEVEL_STOP,
+			stop_at=STRANGE_ITEM_STOP_AT,
+			per_level_discount_factor=STRANGE_ITEM_DISCOUNT,
+		)
+
+	def _post(iteration_idx: int, strategy, U, T, V, candidate_values_by_phase_and_item):
+		# No post-iteration work for now; keep hook for symmetry/future use.
+		return None
+
+	return _pre, _post
 
 # file persistence
 def save_item_values(item_values: Dict[int, Any]):
@@ -86,6 +108,8 @@ def initialize_engine():
 		},
 	)
 
+	pre_iter_hook, post_iter_hook = _make_strange_item_hooks(config.output_strategy)
+
 	item_values = load_item_values() if os.path.exists(ITEM_VALUES_FILE) else None
 	if item_values is not None:
 		print("Loaded item values from file", flush=True)
@@ -97,6 +121,8 @@ def initialize_engine():
 			engine=engine,
 			usage_values=usage_values_seed,
 			config=config,
+			pre_iteration_fn=pre_iter_hook,
+			post_iteration_fn=post_iter_hook,
 		)
 		print(f"Value iteration complete in {time.time() - start_time:.2f}s")
 		save_item_values(item_values)
@@ -138,6 +164,7 @@ def send_mock_client_request():
 		"used_locked_items": [
 			# List[int]
 			MAGIC_GLOVES,
+			YOUNG_THIEF_CLOAK,
 			YOUNG_THIEF_CLOAK,
 		],
 	}
