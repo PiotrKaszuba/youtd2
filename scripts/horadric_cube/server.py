@@ -40,13 +40,13 @@ item_values: Optional[Dict[int, Any]] = None
 config: Optional[OptimizerConfig] = None
 
 # item values file name
-ITEM_VALUES_FILE = "item_values_new.pkl"
+ITEM_VALUES_FILE = "item_values.pkl"
 STRANGE_ITEM_LEVEL_STOP = 350
 STRANGE_ITEM_STOP_AT = 24
 STRANGE_ITEM_DISCOUNT = 0.99
 
 
-def _make_strange_item_hooks(target_strategy: Optional[str]):
+def _make_strange_item_hooks(target_strategy: Optional[str] = None):
 	def _pre(iteration_idx: int, strategy, U, T, V, candidate_values_by_phase_and_item):
 		if target_strategy is not None and strategy.name() != target_strategy:
 			return
@@ -108,7 +108,7 @@ def initialize_engine():
 		},
 	)
 
-	pre_iter_hook, post_iter_hook = _make_strange_item_hooks(config.output_strategy)
+	pre_iter_hook, post_iter_hook = _make_strange_item_hooks()
 
 	item_values = load_item_values() if os.path.exists(ITEM_VALUES_FILE) else None
 	if item_values is not None:
