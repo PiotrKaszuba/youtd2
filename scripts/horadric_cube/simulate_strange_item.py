@@ -29,7 +29,12 @@ def strange_item_per_phase_count(level_stop: int, stop_at: int) -> Dict[GAME_PHA
 	return count_per_phase_start_at
 
 
-def strange_item_per_phase_usage_val(item_values: Dict[int, Any], level_stop: int, stop_at: int, per_level_discount_factor: float = 0.999) -> Dict[GAME_PHASE, float]:
+def strange_item_per_phase_usage_from_transmute_values(
+	transmute_values: Dict[int, float],
+	level_stop: int,
+	stop_at: int,
+	per_level_discount_factor: float = 0.999
+) -> Dict[GAME_PHASE, float]:
 	count_per_phase = strange_item_per_phase_count(level_stop, stop_at)
 	usage_vals = {}
 
@@ -42,10 +47,25 @@ def strange_item_per_phase_usage_val(item_values: Dict[int, Any], level_stop: in
 			if level_diff < 0:
 				continue
 			discount_factor = per_level_discount_factor ** level_diff
-			usage_val += phase_cnt * item_values[STRANGE_ITEM].transmute_value[phase_cnt_idx] * discount_factor
+			usage_val += phase_cnt * transmute_values.get(phase_cnt_idx, 0.0) * discount_factor
 		usage_vals[game_phase] = usage_val
 
 	return usage_vals
+
+
+def strange_item_per_phase_usage_val(item_values: Dict[int, Any], level_stop: int, stop_at: int, per_level_discount_factor: float = 0.999) -> Dict[GAME_PHASE, float]:
+	transmute_values = item_values[STRANGE_ITEM].transmute_value
+	return strange_item_per_phase_usage_from_transmute_values(transmute_values, level_stop, stop_at, per_level_discount_factor)
+
+
+def strange_item_usage_from_T_table(
+	T_table: Dict[int, Dict[GAME_PHASE, float]],
+	level_stop: int,
+	stop_at: int,
+	per_level_discount_factor: float = 0.999,
+) -> Dict[GAME_PHASE, float]:
+	strange_transmute_values = {phase_idx: T_table.get(STRANGE_ITEM, {}).get(phase_idx, 0.0) for phase_idx in range(len(GAME_PHASES))}
+	return strange_item_per_phase_usage_from_transmute_values(strange_transmute_values, level_stop, stop_at, per_level_discount_factor)
 
 
 if __name__ == "__main__":
