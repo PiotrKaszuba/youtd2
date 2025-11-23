@@ -876,7 +876,7 @@ USAGE_ITEM_VALUES: Dict[ITEM_ID, Tuple[GAME_PHASE_VALUE_DICT, Optional[Tuple[int
 	GIFT_OF_THE_WILD: ({-1: 0.1, 5: -0.1, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), None),
 
 
-	STRANGE_ITEM: ({-1: 1.0, 8: -1.0}, (30, 0.0), None),
+	STRANGE_ITEM: ({-1: 0.0, 8: 0.0}, (5, 0.0), None),
 
 	# Rare items
 	HAUNTED_HAND: ({-1: 1.5, 7: -0.25, 8: -1.35}, (2, 0.0), None),
