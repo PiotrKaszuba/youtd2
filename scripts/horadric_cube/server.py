@@ -18,6 +18,7 @@ from scripts.horadric_cube.results import HoradricEngine
 from scripts.horadric_cube.optimizer import (
 	OptimizerConfig,
 	run_value_iteration,
+	run_state_local_refinement,
 	list_transmute_actions_for_state, _make_value_func, generate_candidate_sets_for_recipe, _compute_action_value,
 )
 from scripts.horadric_cube.constants import (
@@ -33,6 +34,7 @@ from scripts.horadric_cube.models import Rarity
 from scripts.horadric_cube.simulate_strange_item import strange_item_usage_from_T_table
 
 PORT = 8003
+CONTINUE_OPT = True
 
 # Global engine and values, initialized on startup
 engine: Optional[HoradricEngine] = None
@@ -41,13 +43,13 @@ config: Optional[OptimizerConfig] = None
 
 # item values file name
 ITEM_VALUES_FILE = "item_values.pkl"
-STRANGE_ITEM_LEVEL_STOP = 350
+STRANGE_ITEM_LEVEL_STOP = 300
 STRANGE_ITEM_STOP_AT = 24
 STRANGE_ITEM_DISCOUNT = 0.99
 
 
 def _make_strange_item_hooks(target_strategy: Optional[str] = None):
-	def _pre(iteration_idx: int, strategy, U, T, V, candidate_values_by_phase_and_item):
+	def _post(iteration_idx: int, strategy, U, T, V, candidate_values_by_phase_and_item):
 		if target_strategy is not None and strategy.name() != target_strategy:
 			return
 		U[STRANGE_ITEM] = strange_item_usage_from_T_table(
@@ -57,8 +59,8 @@ def _make_strange_item_hooks(target_strategy: Optional[str] = None):
 			per_level_discount_factor=STRANGE_ITEM_DISCOUNT,
 		)
 
-	def _post(iteration_idx: int, strategy, U, T, V, candidate_values_by_phase_and_item):
-		# No post-iteration work for now; keep hook for symmetry/future use.
+	def _pre(iteration_idx: int, strategy, U, T, V, candidate_values_by_phase_and_item):
+		# No pre-iteration work for now; keep hook for symmetry/future use.
 		return None
 
 	return _pre, _post
@@ -91,20 +93,22 @@ def initialize_engine():
 	config = OptimizerConfig(
 		recipes_included={RECIPE_REASSEMBLE, RECIPE_PERFECT},
 		excluded_recipe_rarities={(RECIPE_PERFECT, Rarity.UNIQUE), },
+		
+		random_seed=42,
 
 		ingredient_rarity_whitelist={Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.UNIQUE},
 		phases_included={i for i in range(len(GAME_PHASES))},
 		greedy_sets_per_recipe={-1: 1000},
-		random_sets_per_recipe={-1: 200_000, RECIPE_PERFECT: 200_000},
-		num_iterations=50,
-		learning_rate=0.15,
+		random_sets_per_recipe={-1: 250_000, RECIPE_PERFECT: 500_000},
+		num_iterations=2,
+		learning_rate=0.33,
 		strategies=["custom",],
 		output_strategy="custom",
 		percentile_target=98.5,
 		custom_strategy_weights={
 			"max": 0,
-			"avg": 0.15,
-			"pct": 0.85,
+			"avg": 0.175,
+			"pct": 0.825,
 		},
 	)
 
@@ -113,7 +117,22 @@ def initialize_engine():
 	item_values = load_item_values() if os.path.exists(ITEM_VALUES_FILE) else None
 	if item_values is not None:
 		print("Loaded item values from file", flush=True)
-		# item_values = _update_item_values(item_values, usage_values_seed)
+		if CONTINUE_OPT:
+			print("Continuing value iteration on loaded values...", flush=True)
+			start_time = time.time()
+			item_values = run_state_local_refinement(
+				engine=engine,
+				global_item_values=item_values,
+				state_inventory=None,
+				state_recipes_available=None,
+				config=config,
+				extra_iterations=config.num_iterations,
+				new_usage_values=None,  # usage_values_seed,
+				pre_iteration_fn=pre_iter_hook,
+				post_iteration_fn=post_iter_hook,
+			)
+			print(f"Continuation complete in {time.time() - start_time:.2f}s", flush=True)
+			save_item_values(item_values)
 	else:
 		print("Running initial value iteration...", flush=True)
 		start_time = time.time()
