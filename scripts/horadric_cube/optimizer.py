@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
+import pickle
 import random
+from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
@@ -261,6 +263,68 @@ def _canonicalize_candidate(ingredients: Sequence[ITEM_ID]) -> Tuple[int, ...]:
 	Return a stable, sorted tuple of ingredient IDs for deduplication and storage.
 	"""
 	return tuple(sorted(ingredients))
+
+
+def _build_final_item_values(
+	item_values: Dict[ITEM_ID, ItemValue],
+	U: Dict[ITEM_ID, Dict[GAME_PHASE, float]],
+	T_tables: Dict[str, Dict[ITEM_ID, Dict[GAME_PHASE, float]]],
+	config: OptimizerConfig,
+) -> Dict[ITEM_ID, ItemValue]:
+	"""
+	Assemble ItemValue objects using the selected output strategy face.
+	"""
+	final_item_values: Dict[ITEM_ID, ItemValue] = {}
+	output_strategy = config.output_strategy or "custom"
+	if output_strategy not in T_tables:
+		output_strategy = next(iter(T_tables.keys()))
+
+	num_phases = len(GAME_PHASES)
+	for item_id, iv in item_values.items():
+		face: GAME_PHASE_VALUE_DICT = {}
+		for phase_idx in range(num_phases):
+			face[phase_idx] = T_tables[output_strategy][item_id].get(phase_idx, 0.0)
+		all_tables: Dict[str, GAME_PHASE_VALUE_DICT] = {}
+		for name, table in T_tables.items():
+			all_tables[name] = {phase_idx: table[item_id].get(phase_idx, 0.0) for phase_idx in range(num_phases)}
+		final_item_values[item_id] = ItemValue(
+			item_id=item_id,
+			usage_value=U[item_id],
+			transmute_value=face,
+			transmute_values_by_strategy=all_tables,
+			usage_cap=iv.usage_cap,
+		)
+	return final_item_values
+
+
+def _save_iteration_checkpoint(
+	iteration_idx: int,
+	item_values: Dict[ITEM_ID, ItemValue],
+	U: Dict[ITEM_ID, Dict[GAME_PHASE, float]],
+	T_tables: Dict[str, Dict[ITEM_ID, Dict[GAME_PHASE, float]]],
+	config: OptimizerConfig,
+	checkpoint_every: Optional[int],
+	checkpoint_base_path: Optional[str],
+) -> None:
+	if checkpoint_every is None or checkpoint_every <= 0:
+		return
+	if not checkpoint_base_path:
+		return
+	current_iteration = iteration_idx + 1
+	if current_iteration % checkpoint_every != 0:
+		return
+
+	base_path = Path(checkpoint_base_path)
+	name = f"{base_path.stem}_checkpoint_{current_iteration}"
+	if base_path.suffix:
+		name += base_path.suffix
+	checkpoint_path = base_path.with_name(name)
+	checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
+	final_item_values = _build_final_item_values(item_values, U, T_tables, config)
+	with checkpoint_path.open("wb") as fp:
+		pickle.dump(final_item_values, fp)
+	print(f"Saved checkpoint at iteration {current_iteration} -> {checkpoint_path}")
 
 
 def _make_value_func(
@@ -705,6 +769,8 @@ def run_value_iteration(
 	config: OptimizerConfig,
 	pre_iteration_fn: Optional[IterationHook] = None,
 	post_iteration_fn: Optional[IterationHook] = None,
+	checkpoint_every: Optional[int] = None,
+	checkpoint_base_path: Optional[str] = None,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Global value iteration to learn absolute transmute values T[i, phase].
@@ -752,6 +818,8 @@ def run_value_iteration(
 		state_recipes_available=None,
 		pre_iteration_fn=pre_iteration_fn,
 		post_iteration_fn=post_iteration_fn,
+		checkpoint_every=checkpoint_every,
+		checkpoint_base_path=checkpoint_base_path,
 	)
 
 
@@ -767,6 +835,8 @@ def _run_value_iteration_core(
 	state_recipes_available: Optional[Set[int]],
 	pre_iteration_fn: Optional[IterationHook] = None,
 	post_iteration_fn: Optional[IterationHook] = None,
+	checkpoint_every: Optional[int] = None,
+	checkpoint_base_path: Optional[str] = None,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Shared core for global and state-local value iteration.
@@ -801,7 +871,8 @@ def _run_value_iteration_core(
 		print(f"Random sets for recipe {recipe_id}: {len(random_sets)}")
 
 		cached_list: List[CachedCandidate] = []
-		for S in random_sets:
+		print(f"Caching random sets for recipe {recipe_id}...")
+		for S in tqdm(random_sets):
 			if not S:
 				continue
 			permanent_levels: List[int] = []
@@ -959,42 +1030,31 @@ def _run_value_iteration_core(
 					candidate_values_by_phase_and_item,
 				)
 
-	# Build final ItemValue objects with learned T.
-	final_item_values: Dict[ITEM_ID, ItemValue] = {}
-	# Select output face strategy
-	output_strategy = config.output_strategy or "custom"
-	if output_strategy not in T_tables:
-		output_strategy = next(iter(T_tables.keys()))
-	for item_id, iv in item_values.items():
-		face: GAME_PHASE_VALUE_DICT = {}
-		for phase_idx in range(len(GAME_PHASES)):
-			face[phase_idx] = T_tables[output_strategy][item_id].get(phase_idx, 0.0)
-		all_tables: Dict[str, GAME_PHASE_VALUE_DICT] = {}
-		for name, table in T_tables.items():
-			all_tables[name] = {phase_idx: table[item_id].get(phase_idx, 0.0) for phase_idx in range(len(GAME_PHASES))}
-		final_item_values[item_id] = ItemValue(
-			item_id=item_id,
-			usage_value=U[item_id],
-			transmute_value=face,
-			transmute_values_by_strategy=all_tables,
-			usage_cap=iv.usage_cap,
+		_save_iteration_checkpoint(
+			iteration_idx=iteration_idx,
+			item_values=item_values,
+			U=U,
+			T_tables=T_tables,
+			config=config,
+			checkpoint_every=checkpoint_every,
+			checkpoint_base_path=checkpoint_base_path,
 		)
 
-	return final_item_values
+	return _build_final_item_values(item_values, U, T_tables, config)
 
 
 def run_state_local_refinement(
 	engine: HoradricEngine,
 	global_item_values: Dict[ITEM_ID, ItemValue],
 	config: OptimizerConfig,
-
 	state_inventory: Optional[Inventory] = None,
 	state_recipes_available: Optional[Set[int]] = None,
-
 	extra_iterations: int = 10,
 	new_usage_values: Optional[Dict[ITEM_ID, Any]] = None,
 	pre_iteration_fn: Optional[IterationHook] = None,
 	post_iteration_fn: Optional[IterationHook] = None,
+	checkpoint_every: Optional[int] = None,
+	checkpoint_base_path: Optional[str] = None,
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Refine T/V for a specific state, using global_item_values as initialization.
@@ -1078,6 +1138,8 @@ def run_state_local_refinement(
 		state_recipes_available=state_recipes_available,
 		pre_iteration_fn=pre_iteration_fn,
 		post_iteration_fn=post_iteration_fn,
+		checkpoint_every=checkpoint_every,
+		checkpoint_base_path=checkpoint_base_path,
 	)
 
 

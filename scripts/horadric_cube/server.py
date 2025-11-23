@@ -46,6 +46,9 @@ ITEM_VALUES_FILE = "item_values.pkl"
 STRANGE_ITEM_LEVEL_STOP = 300
 STRANGE_ITEM_STOP_AT = 24
 STRANGE_ITEM_DISCOUNT = 0.99
+CHECKPOINT_BASE_FILE = ITEM_VALUES_FILE
+CHECKPOINT_EVERY_INITIAL: Optional[int] = 1
+CHECKPOINT_EVERY_CONTINUE: Optional[int] = 1
 
 
 def _make_strange_item_hooks(target_strategy: Optional[str] = None):
@@ -99,7 +102,7 @@ def initialize_engine():
 		ingredient_rarity_whitelist={Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.UNIQUE},
 		phases_included={i for i in range(len(GAME_PHASES))},
 		greedy_sets_per_recipe={-1: 1000},
-		random_sets_per_recipe={-1: 250_000, RECIPE_PERFECT: 500_000},
+		random_sets_per_recipe={-1: 250_000, RECIPE_PERFECT: 750_000},
 		num_iterations=2,
 		learning_rate=0.33,
 		strategies=["custom",],
@@ -130,6 +133,8 @@ def initialize_engine():
 				new_usage_values=None,  # usage_values_seed,
 				pre_iteration_fn=pre_iter_hook,
 				post_iteration_fn=post_iter_hook,
+				checkpoint_every=CHECKPOINT_EVERY_CONTINUE,
+				checkpoint_base_path=CHECKPOINT_BASE_FILE,
 			)
 			print(f"Continuation complete in {time.time() - start_time:.2f}s", flush=True)
 			save_item_values(item_values)
@@ -142,6 +147,8 @@ def initialize_engine():
 			config=config,
 			pre_iteration_fn=pre_iter_hook,
 			post_iteration_fn=post_iter_hook,
+			checkpoint_every=CHECKPOINT_EVERY_INITIAL,
+			checkpoint_base_path=CHECKPOINT_BASE_FILE,
 		)
 		print(f"Value iteration complete in {time.time() - start_time:.2f}s")
 		save_item_values(item_values)
