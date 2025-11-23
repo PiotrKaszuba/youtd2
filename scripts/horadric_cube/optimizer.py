@@ -137,9 +137,13 @@ def _init_item_values(
 		usage_entry = usage_values.get(item_id)
 		usage_val = None
 		usage_cap = None
+		family_info = None
 
 		if isinstance(usage_entry, tuple):
-			usage_val, usage_cap = usage_entry
+			if len(usage_entry) == 3:
+				usage_val, usage_cap, family_info = usage_entry
+			elif len(usage_entry) == 2:
+				usage_val, usage_cap = usage_entry
 		elif isinstance(usage_entry, dict):
 			usage_val = usage_entry
 
@@ -147,6 +151,7 @@ def _init_item_values(
 			item_id=item_id,
 			usage_value=usage_val,
 			usage_cap_single=usage_cap,
+			family_info=family_info,
 		)
 	return item_values
 
@@ -160,11 +165,17 @@ def _update_item_values(
 		usage_entry = usage_values.get(item_id)
 		usage_val = None
 		usage_cap = None
+		family_info = None
+		
 		if isinstance(usage_entry, tuple):
-			usage_val, usage_cap = usage_entry
+			if len(usage_entry) == 3:
+				usage_val, usage_cap, family_info = usage_entry
+			elif len(usage_entry) == 2:
+				usage_val, usage_cap = usage_entry
 		elif isinstance(usage_entry, dict):
 			usage_val = usage_entry
-		item_values_new[item_id] = iv.update_keep_transmute_value(usage_val, inventory, usage_cap_single=usage_cap)
+			
+		item_values_new[item_id] = iv.update_keep_transmute_value(usage_val, inventory, usage_cap_single=usage_cap, family_info=family_info)
 	return item_values_new
 
 
@@ -206,8 +217,9 @@ def _build_candidate_pools(
 
 	# Sort by current value in this phase to prioritize low-value ingredients.
 	if value_func is not None:
-		permanent_pool.sort(key=lambda i: float(value_func(i)))
-		usable_pool.sort(key=lambda i: float(value_func(i)))
+		# Use consume_count=1 for initial sorting to reflect "cost of using one" approximately
+		permanent_pool.sort(key=lambda i: float(value_func(i, consume_count=1)))
+		usable_pool.sort(key=lambda i: float(value_func(i, consume_count=1)))
 
 	return permanent_pool, usable_pool
 
@@ -235,23 +247,60 @@ def _make_value_func(
 	state_inventory: Optional[Inventory] = None,
 ):
 	"""
-	Build a value function V(item_id) for a given phase, optionally applying
+	Build a value function V(item_id, consume_count=0) for a given phase, optionally applying
 	usage caps based on the provided inventory.
 	"""
 
 	if state_inventory is None:
-		return lambda item_id: item_values[item_id].get_value(phase)
+		return lambda item_id, consume_count=0: item_values[item_id].get_value(phase)
 
-	def V(item_id: ITEM_ID) -> float:
+	def V(item_id: ITEM_ID, consume_count: int = 0) -> float:
 		iv = item_values[item_id]
-		u = iv.usage_value.get(phase, 0.0)
+		# Calculate effective usage value considering inventory state
+		# Re-use logic from ItemValue.determine_usage_value but simplified for single lookup
+		
+		base_u = iv.usage_value.get(phase, 0.0)
 		t = iv.transmute_value.get(phase, 0.0)
 
-		# Apply usage caps if configured.
-		if iv.usage_cap is not None:
-			max_count, overflow_val = iv.usage_cap
-			if state_inventory.get(item_id, 0) >= max_count:
-				u = overflow_val
+		if iv.usage_cap is None:
+			return max(base_u, t)
+
+		# If we have usage caps, we need to check effective count
+		# effective_count = (current_inventory - consume_count) + shadow_count
+		
+		# 1. Current Inventory
+		count = state_inventory.get(item_id, 0)
+		
+		# 2. Shadow Count
+		shadow_count = 0.0
+		if iv.family_info:
+			from .constants import FAMILY_RULES, get_item_family_info # Local import to avoid circular dependency if any
+			fam_id, tier, _ = iv.family_info
+			
+			for other_id, other_count in state_inventory.items():
+				if other_count <= 0:
+					continue
+				# Optimization: we could pre-calculate this map, but for now iteration is fine
+				other_fam_info = get_item_family_info(other_id)
+				if not other_fam_info:
+					continue
+				other_fam_id, other_tier, _ = other_fam_info
+				
+				if other_fam_id == fam_id and other_tier > tier:
+					tier_diff = other_tier - tier
+					rule = FAMILY_RULES.get(fam_id)
+					if rule and tier_diff in rule.downward_impacts:
+						impact_dict = rule.downward_impacts[tier_diff]
+						base_impact = impact_dict.get(-1, 0.0)
+						impact = base_impact + impact_dict.get(phase, 0.0)
+						shadow_count += other_count * impact
+
+		effective_count = max(0, count - consume_count) + shadow_count
+		max_count, overflow_val = iv.usage_cap
+		
+		u = base_u
+		if effective_count >= max_count:
+			u = overflow_val
 
 		return max(u, t)
 
@@ -544,7 +593,32 @@ def _compute_action_value(
 	in which this function is called (global iteration or finalized values).
 	"""
 	# Ingredient opportunity cost under current V.
-	ingredient_cost = sum(value_func(i) for i in S)
+	# Count occurrences of each item to correctly apply consume_count
+	item_counts = defaultdict(int)
+	ingredient_cost = 0.0
+	
+	for i in S:
+		item_counts[i] += 1
+		# Pass consume_count = current count (before this usage, so 1-based index of usage)
+		# value_func(i, consume_count=1) calculates value of 1st item consumed
+		# value_func(i, consume_count=2) calculates value of 2nd item consumed
+		# Wait, implementation of value_func uses (count - consume_count).
+		# If I have 2 items. Cap is 2.
+		# Cost of 1st item: V(i, 1). effective = 2 - 1 = 1. Usage Val = Full. Correct?
+		# If effective < Cap (1 < 2), value is Full.
+		# This means "The item remaining (1st one) has full value".
+		# The cost should be "The value of the item REMOVED".
+		# If I remove the 2nd item (going from 2 to 1). The item REMOVED was the 2nd one.
+		# Its marginal contribution was shifting state from 1 -> 2.
+		# V(i, 0) is value of adding one at state 0.
+		# V(i, 1) is value of adding one at state 1.
+		# If we are at state 2. We consume one. We go to state 1.
+		# The lost value is V(i, 1) (Value of going 1->2).
+		# So cost of 1st ingredient = V(i, 1).
+		# Cost of 2nd ingredient (if we use 2) = V(i, 2) (Value of going 0->1).
+		# My implementation of V(i, consume) calculates value of adding NEXT item starting from (inventory - consume).
+		# So V(i, 1) -> effective = count - 1. Value of adding (count)th item. Correct.
+		ingredient_cost += value_func(i, consume_count=item_counts[i])
 
 	# Use actual average permanent level of S, falling back to phase bounds
 	# for recipes with no permanents.
@@ -554,13 +628,10 @@ def _compute_action_value(
 		if item is not None and item.is_permanent:
 			permanent_levels.append(item.required_wave_level)
 
-	if permanent_levels:
-		avg_permanent_level = int(
-			sum(permanent_levels) // max(len(permanent_levels), 1)
-		)
-	else:
-		lvl_min, lvl_max = _get_phase_level_bounds(phase)
-		avg_permanent_level = (lvl_min + lvl_max) // 2
+
+	avg_permanent_level = int(
+		sum(permanent_levels) // max(len(permanent_levels), 1)
+	)
 
 	# Infer ingredient rarity from the first permanent ingredient if present;
 	# otherwise fall back to common.
@@ -735,7 +806,7 @@ def _run_value_iteration_core(
 					recipe_id=recipe_id,
 					config=config,
 					state_inventory=state_inventory,
-					value_func=lambda i, T_tables=T_tables, U=U, phase=phase, config=config: max(
+					value_func=lambda i, consume_count=0, T_tables=T_tables, U=U, phase=phase, config=config: max(
 						U[i].get(phase, 0.0),
 						T_tables.get(config.output_strategy or "custom", {}).get(i, {}).get(phase, 0.0),
 					),
