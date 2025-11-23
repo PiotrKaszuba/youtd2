@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
+import random
 import numpy as np
 from tqdm import tqdm
 
@@ -31,6 +32,7 @@ class OptimizerConfig:
 	ingredient_include_usable: bool = True
 	num_iterations: int = 50
 	learning_rate: float = 0.1
+	random_seed: Optional[int] = None
 	phases_included: Optional[Set[GAME_PHASE]] = None
 	greedy_sets_per_recipe: Dict[int, int] = field(default_factory=dict)
 	random_sets_per_recipe: Dict[int, int] = field(default_factory=dict)
@@ -254,6 +256,13 @@ class CachedCandidate:
 	result_distribution: Dict[int, float]
 
 
+def _canonicalize_candidate(ingredients: Sequence[ITEM_ID]) -> Tuple[int, ...]:
+	"""
+	Return a stable, sorted tuple of ingredient IDs for deduplication and storage.
+	"""
+	return tuple(sorted(ingredients))
+
+
 def _make_value_func(
 	item_values: Dict[ITEM_ID, ItemValue],
 	phase: GAME_PHASE,
@@ -433,7 +442,7 @@ def generate_greedy_sets_for_recipe(
 	if not batches:
 		return []
 
-	candidates: List[Sequence[ITEM_ID]] = []
+	all_candidates: List[Sequence[ITEM_ID]] = []
 	seen: Set[Tuple[int, ...]] = set()
 	for perm_sub_pool, g_budget, _ in batches:
 		if g_budget <= 0:
@@ -441,6 +450,7 @@ def generate_greedy_sets_for_recipe(
 		# Sliding window over sorted rarity pool
 		num_perm_sets = 1 if n_perm == 0 else max(0, len(perm_sub_pool) - n_perm) + 1
 		iters = min(g_budget, num_perm_sets)
+		batch_candidates: List[Sequence[ITEM_ID]] = []
 		for i in range(iters):
 			current: List[ITEM_ID] = []
 			if n_perm > 0:
@@ -449,12 +459,15 @@ def generate_greedy_sets_for_recipe(
 				current.extend(usable_pool[:n_usable])
 			if not current:
 				continue
-			key = tuple(sorted(current))
-			if key in seen:
+			canonical = _canonicalize_candidate(current)
+			if canonical in seen:
 				continue
-			seen.add(key)
-			candidates.append(list(key))
-	return candidates
+			seen.add(canonical)
+			batch_candidates.append(list(canonical))
+			if len(batch_candidates) >= g_budget:
+				break
+		all_candidates.extend(batch_candidates)
+	return all_candidates
 
 
 def generate_random_sets_for_recipe(
@@ -462,9 +475,11 @@ def generate_random_sets_for_recipe(
 	recipe_id: int,
 	config: OptimizerConfig,
 	state_inventory: Optional[Inventory] = None,
+	rng: Optional[random.Random] = None,
 ) -> List[Sequence[ITEM_ID]]:
 	# Prefer the authoritative recipe_db
 	recipe = engine.recipe_db.recipes[recipe_id]
+	rng = rng or random
 
 	permanent_pool, usable_pool = _build_candidate_pools(
 		engine=engine,
@@ -506,41 +521,42 @@ def generate_random_sets_for_recipe(
 	if not batches:
 		return []
 
-	import random
-	candidates: List[Sequence[ITEM_ID]] = []
+	all_candidates: List[Sequence[ITEM_ID]] = []
 	seen: Set[Tuple[int, ...]] = set()
 	for perm_sub_pool, _, r_budget in batches:
 		if r_budget <= 0:
 			continue
 		tries = max(r_budget * 4, r_budget)
+		batch_candidates: List[Sequence[ITEM_ID]] = []
 		for _ in range(tries):
 			current: List[ITEM_ID] = []
 			if n_perm > 0:
 				if state_inventory is not None:
 					if len(perm_sub_pool) < n_perm:
 						continue
-					current.extend(random.sample(perm_sub_pool, n_perm))
+					current.extend(rng.sample(perm_sub_pool, n_perm))
 				else:
-					current.extend(random.choices(perm_sub_pool, k=n_perm))
+					current.extend(rng.choices(perm_sub_pool, k=n_perm))
 			if n_usable > 0:
 				if state_inventory is not None:
 					if len(usable_pool) < n_usable:
 						continue
-					current.extend(random.sample(usable_pool, n_usable))
+					current.extend(rng.sample(usable_pool, n_usable))
 				else:
 					if not usable_pool:
 						continue
-					current.extend(random.choices(usable_pool, k=n_usable))
+					current.extend(rng.choices(usable_pool, k=n_usable))
 			if not current:
 				continue
-			key = tuple(sorted(current))
-			if key in seen:
+			canonical = _canonicalize_candidate(current)
+			if canonical in seen:
 				continue
-			seen.add(key)
-			candidates.append(list(key))
-			if len(candidates) >= r_budget:
+			seen.add(canonical)
+			batch_candidates.append(list(canonical))
+			if len(batch_candidates) >= r_budget:
 				break
-	return candidates
+		all_candidates.extend(batch_candidates)
+	return all_candidates
 
 def generate_candidate_sets_for_recipe(
 	engine: HoradricEngine,
@@ -550,6 +566,7 @@ def generate_candidate_sets_for_recipe(
 	item_values: Dict[ITEM_ID, ItemValue],
 	state_inventory: Optional[Inventory] = None,
 	value_func: Optional[Any] = None,
+	rng: Optional[random.Random] = None,
 ) -> List[Sequence[ITEM_ID]]:
 	"""
 	Generate candidate ingredient sets for a recipe and phase, honoring the
@@ -577,17 +594,18 @@ def generate_candidate_sets_for_recipe(
 		recipe_id=recipe_id,
 		config=config,
 		state_inventory=state_inventory,
+		rng=rng,
 	)
 	# Merge and de-dup
 	seen: Set[Tuple[int, ...]] = set()
 	out: List[Sequence[ITEM_ID]] = []
 	for lst in (greedy, randoms):
 		for S in lst:
-			key = tuple(sorted(S))
-			if key in seen:
+			canonical = _canonicalize_candidate(S)
+			if canonical in seen:
 				continue
-			seen.add(key)
-			out.append(list(key))
+			seen.add(canonical)
+			out.append(list(canonical))
 	return out
 
 
@@ -762,6 +780,7 @@ def _run_value_iteration_core(
 	"""
 	alpha = config.learning_rate
 	phase_indices = config.phases_included if config.phases_included is not None else range(len(GAME_PHASES))
+	rng = random.Random(config.random_seed)
 
 	# Precompute random candidate cache once for all recipes
 	random_cache: Dict[int, List[CachedCandidate]] = {}
@@ -776,6 +795,7 @@ def _run_value_iteration_core(
 			recipe_id=recipe_id,
 			config=config,
 			state_inventory=state_inventory,
+			rng=rng,
 		)
 
 		print(f"Random sets for recipe {recipe_id}: {len(random_sets)}")
@@ -806,7 +826,7 @@ def _run_value_iteration_core(
 			)
 			cached_list.append(CachedCandidate(
 				recipe_id=recipe_id,
-				ingredients=tuple(sorted(S)),
+				ingredients=_canonicalize_candidate(S),
 				result_rarity=result_rarity,
 				avg_permanent_level=avg_permanent_level,
 				result_distribution=dist,
@@ -859,7 +879,7 @@ def _run_value_iteration_core(
 					)
 					cached_list.append(CachedCandidate(
 						recipe_id=recipe_id,
-						ingredients=tuple(sorted(S)),
+						ingredients=_canonicalize_candidate(S),
 						result_rarity=result_rarity,
 						avg_permanent_level=avg_permanent_level,
 						result_distribution=dist,
@@ -966,9 +986,11 @@ def _run_value_iteration_core(
 def run_state_local_refinement(
 	engine: HoradricEngine,
 	global_item_values: Dict[ITEM_ID, ItemValue],
-	state_inventory: Inventory,
-	state_recipes_available: Optional[Set[int]],
 	config: OptimizerConfig,
+
+	state_inventory: Optional[Inventory] = None,
+	state_recipes_available: Optional[Set[int]] = None,
+
 	extra_iterations: int = 10,
 	new_usage_values: Optional[Dict[ITEM_ID, Any]] = None,
 	pre_iteration_fn: Optional[IterationHook] = None,
@@ -976,6 +998,7 @@ def run_state_local_refinement(
 ) -> Dict[ITEM_ID, ItemValue]:
 	"""
 	Refine T/V for a specific state, using global_item_values as initialization.
+	When state_inventory is None, this continues global optimization from the saved values.
 
 	This runs a smaller number of iterations, restricted to actions that are
 	feasible under the provided inventory and available recipes.
@@ -1022,11 +1045,16 @@ def run_state_local_refinement(
 			# Parse potential tuple structure
 			usage_val = None
 			usage_cap = None
+			family_info = None
 			if isinstance(usage_entry, tuple):
-				usage_val, usage_cap = usage_entry
+				if len(usage_entry) == 3:
+					usage_val, usage_cap, family_info = usage_entry
+				elif len(usage_entry) == 2:
+					usage_val, usage_cap = usage_entry
 			elif isinstance(usage_entry, dict):
 				usage_val = usage_entry
 				usage_cap = item_values[item_id].usage_cap
+				family_info = item_values[item_id].family_info
 			
 			if usage_val is not None:
 				iv_override = ItemValue.from_data(
@@ -1034,6 +1062,7 @@ def run_state_local_refinement(
 					usage_value=dict(usage_val),
 					inventory=state_inventory,
 					usage_cap_single=usage_cap,
+					family_info=family_info or item_values[item_id].family_info,
 				)
 				U[item_id] = dict(iv_override.usage_value)
 
@@ -1081,6 +1110,7 @@ def rank_recipes_by_net_gain(
 		phase=phase,
 		state_inventory=state_inventory,
 	)
+	rng = random.Random(config.random_seed)
 
 	for recipe in engine.recipe_db.recipes.values():
 		recipe_id = recipe.id
@@ -1094,6 +1124,7 @@ def rank_recipes_by_net_gain(
 			config=config,
 			item_values=item_values,
 			state_inventory=state_inventory,
+			rng=rng,
 		)
 		for S in candidate_sets:
 			if not S:
@@ -1160,6 +1191,7 @@ def list_transmute_actions_for_state(
 		phase=phase,
 		state_inventory=state_inventory,
 	)
+	rng = random.Random(config.random_seed)
 
 	for recipe in engine.recipe_db.recipes.values():
 		recipe_id = recipe.id
@@ -1175,6 +1207,7 @@ def list_transmute_actions_for_state(
 			config=config,
 			item_values=item_values,
 			state_inventory=state_inventory,
+			rng=rng,
 		)
 
 		for S in candidate_sets:
