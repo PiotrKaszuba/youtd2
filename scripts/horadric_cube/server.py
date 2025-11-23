@@ -38,13 +38,16 @@ engine: Optional[HoradricEngine] = None
 item_values: Optional[Dict[int, Any]] = None
 config: Optional[OptimizerConfig] = None
 
+# item values file name
+ITEM_VALUES_FILE = "item_values.pkl"
+
 # file persistence
 def save_item_values(item_values: Dict[int, Any]):
-	with open("item_values.pkl", "wb") as f:
+	with open(ITEM_VALUES_FILE, "wb") as f:
 		pickle.dump(item_values, f)
 
 def load_item_values():
-	with open("item_values.pkl", "rb") as f:
+	with open(ITEM_VALUES_FILE, "rb") as f:
 		return pickle.load(f)
 
 def initialize_engine():
@@ -83,7 +86,7 @@ def initialize_engine():
 		},
 	)
 
-	item_values = load_item_values() if os.path.exists("item_values.pkl") else None
+	item_values = load_item_values() if os.path.exists(ITEM_VALUES_FILE) else None
 	if item_values is not None:
 		print("Loaded item values from file", flush=True)
 		# item_values = _update_item_values(item_values, usage_values_seed)
@@ -132,7 +135,7 @@ def send_mock_client_request():
 			{"id": RING_OF_LUCK, "uid": 8},
 			{"id": SCARAB_AMULET, "uid": 9},
 		],
-		"tower_inventory": [
+		"used_locked_items": [
 			# List[int]
 			MAGIC_GLOVES,
 			YOUNG_THIEF_CLOAK,
@@ -193,7 +196,7 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 		request_id = data.get('request_id')
 		# Expecting list of dicts: [{'id': type_id, 'uid': uid}, ...]
 		transmute_inventory_items = data.get('transmute_inventory_items', [])
-		tower_inventory_ids = data.get('tower_inventory', [])
+		used_locked_items_ids = data.get('used_locked_items', [])
 		
 		# Determine phase from level if provided
 		level = int(data['level'])
@@ -218,8 +221,8 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 		
 		# Combine inventories for caps: counts from transmute items + counts from tower IDs
 		inventory_for_caps = items_to_inventory(transmute_inventory_items)
-		tower_counts = ids_to_inventory(tower_inventory_ids)
-		for tid, count in tower_counts.items():
+		used_locked_counts = ids_to_inventory(used_locked_items_ids)
+		for tid, count in used_locked_counts.items():
 			inventory_for_caps[tid] = inventory_for_caps.get(tid, 0) + count
 
 		actions: List[Tuple[int, List[int], float]] = []
