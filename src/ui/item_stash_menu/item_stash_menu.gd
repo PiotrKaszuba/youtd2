@@ -415,18 +415,26 @@ func _start_optimization_request():
 	
 	# 1. Transmute Inventory: Item Stash + Horadric Cube (send both ID and UID)
 	var transmute_inventory_items: Array[Dictionary] = []
-	for item in local_player.get_item_stash().get_item_list():
-		transmute_inventory_items.append({"id": item.get_id(), "uid": item.get_uid()})
-	for item in local_player.get_horadric_stash().get_item_list():
-		transmute_inventory_items.append({"id": item.get_id(), "uid": item.get_uid()})
+	var used_locked_items_ids: Array[int] = []
 	
-	# 2. Tower Inventory: All towers owned by player
-	var tower_inventory_ids: Array[int] = []
+	for item in local_player.get_item_stash().get_item_list():
+		if item.get_horadric_lock_is_enabled():
+			used_locked_items_ids.append(item.get_id())
+		else:
+			transmute_inventory_items.append({"id": item.get_id(), "uid": item.get_uid()})
+
+	for item in local_player.get_horadric_stash().get_item_list():
+		if item.get_horadric_lock_is_enabled():
+			used_locked_items_ids.append(item.get_id())
+		else:
+			transmute_inventory_items.append({"id": item.get_id(), "uid": item.get_uid()})
+	
+	# 2. Used/Locked Inventory: All towers owned by player + locked items
 	var towers: Array[Tower] = Utils.get_tower_list()
 	for tower in towers:
 		if tower.get_player() == local_player:
 			for item in tower.get_item_container().get_item_list():
-				tower_inventory_ids.append(item.get_id())
+				used_locked_items_ids.append(item.get_id())
 	
 	var current_level: int = local_player.get_team().get_level()
 	
@@ -436,7 +444,7 @@ func _start_optimization_request():
 	var body: Dictionary = {
 		"request_id": _current_request_id,
 		"transmute_inventory_items": transmute_inventory_items,
-		"tower_inventory": tower_inventory_ids,
+		"used_locked_items": used_locked_items_ids,
 		"level": current_level
 	}
 	
