@@ -17,6 +17,7 @@ from .constants import (
 	ITEM_ID,
 	ItemValue,
 	Inventory,
+	normalize_family_infos,
 )
 from .db import ItemDatabase, RecipeDatabase
 from .models import Item, Recipe, ResultItemType, Rarity
@@ -360,23 +361,35 @@ def _make_value_func(
 		# 2. Shadow Count
 		shadow_count = 0.0
 		if iv.family_info:
-			from .constants import FAMILY_RULES, get_item_family_info # Local import to avoid circular dependency if any
-			fam_id, tier, _ = iv.family_info
-			
-			for other_id, other_count in state_inventory.items():
-				if other_count <= 0:
+			from .constants import FAMILY_RULES, get_item_family_infos # Local import to avoid circular dependency if any
+			family_infos = normalize_family_infos(iv.family_info)
+			for fam_id, tier, _ in family_infos:
+				rule = FAMILY_RULES.get(fam_id)
+				if not rule:
 					continue
-				# Optimization: we could pre-calculate this map, but for now iteration is fine
-				other_fam_info = get_item_family_info(other_id)
-				if not other_fam_info:
-					continue
-				other_fam_id, other_tier, _ = other_fam_info
-				
-				if other_fam_id == fam_id and other_tier > tier:
-					tier_diff = other_tier - tier
-					rule = FAMILY_RULES.get(fam_id)
-					if rule and tier_diff in rule.downward_impacts:
-						impact_dict = rule.downward_impacts[tier_diff]
+				for other_id, other_count in state_inventory.items():
+					if other_count <= 0:
+						continue
+					other_infos = get_item_family_infos(other_id)
+					if not other_infos:
+						continue
+					for other_fam_id, other_tier, _ in other_infos:
+						if other_fam_id != fam_id:
+							continue
+						tier_diff = other_tier - tier
+						if tier_diff < 0:
+							continue
+						if tier_diff == 0 and other_id == item_id:
+							continue
+						impact_dict = None
+						if tier_diff in rule.downward_impacts:
+							impact_dict = rule.downward_impacts[tier_diff]
+						else:
+							applicable_diffs = [diff for diff in rule.downward_impacts.keys() if diff <= tier_diff]
+							if applicable_diffs:
+								impact_dict = rule.downward_impacts[max(applicable_diffs)]
+						if impact_dict is None:
+							continue
 						base_impact = impact_dict.get(-1, 0.0)
 						impact = base_impact + impact_dict.get(phase, 0.0)
 						shadow_count += other_count * impact
