@@ -220,7 +220,7 @@ def test_missing_family_rule_graceful_fail(create_item_value):
 	assert vf(1) == 10.0
 
 def test_circular_or_same_tier_shadowing(create_item_value):
-	"""Ensure items only shadow LOWER tiers."""
+	"""Same-tier items can share caps when rule defines tier_diff=0."""
 	FAMILY_RULES[100] = FamilyRule(downward_impacts={0: {-1: 1.0}})
 	
 	iv1 = create_item_value(1, 10.0, 2, 1.0, family_info=(100, 1, {}))
@@ -231,4 +231,25 @@ def test_circular_or_same_tier_shadowing(create_item_value):
 	inventory = {1: 1, 2: 5}
 	
 	vf = _make_value_func(item_values, 0, state_inventory=inventory)
-	assert vf(1) == 10.0
+	assert vf(1) == 1.0
+
+
+def test_multi_family_membership(create_item_value):
+	"""Items belonging to multiple families accumulate all applicable shadows."""
+	FAMILY_RULES[100] = FamilyRule(downward_impacts={1: {-1: 1.0}})
+	FAMILY_RULES[200] = FamilyRule(downward_impacts={1: {-1: 1.0}})
+	
+	iv_base = create_item_value(
+		1,
+		10.0,
+		2,
+		1.0,
+		family_info=[(100, 1, {}), (200, 1, {})],
+	)
+	iv_a = create_item_value(2, 50.0, None, 0.0, family_info=(100, 2, {}))
+	iv_b = create_item_value(3, 60.0, None, 0.0, family_info=(200, 2, {}))
+	item_values = {1: iv_base, 2: iv_a, 3: iv_b}
+	inventory = {1: 1, 2: 1, 3: 1}
+	vf = _make_value_func(item_values, 0, state_inventory=inventory)
+	# Each family contributes 1 shadow count -> effective = 1 (self) + 1 + 1 = 3 >= cap.
+	assert vf(1) == 1.0

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TypeAlias, Dict, List, Optional, Tuple, Any
+from typing import TypeAlias, Dict, List, Optional, Tuple, Any, Iterable
 
 import numpy as np
 from pathlib import Path
@@ -78,8 +78,186 @@ def get_phase_avg_level(phase: GAME_PHASE) -> int:
 class FamilyRule:
 	downward_impacts: Dict[int, GAME_PHASE_VALUE_DICT] = field(default_factory=dict)
 
+
+def normalize_family_infos(family_info: Any) -> List[FAMILY_INFO]:
+	"""
+	Accept a single FAMILY_INFO tuple or any iterable of them and return a normalized list.
+	"""
+	if family_info is None:
+		return []
+	if isinstance(family_info, tuple) and len(family_info) == 3 and isinstance(family_info[0], int):
+		return [family_info]
+	infos: List[FAMILY_INFO] = []
+	if isinstance(family_info, Iterable):
+		for entry in family_info:
+			if isinstance(entry, tuple) and len(entry) == 3 and isinstance(entry[0], int):
+				infos.append(entry)
+	return infos
+
 # Map family_id -> FamilyRule
-FAMILY_RULES: Dict[int, FamilyRule] = {}
+ITEM_FAMILY_ITEM_FIND: int = 1
+ITEM_FAMILY_ITEM_QUALITY: int = 2
+ITEM_FAMILY_MAIN_DAMAGE: int = 3
+ITEM_FAMILY_OTHER_DAMAGE: int = 4
+ITEM_FAMILY_BUFF: int = 5
+ITEM_FAMILY_TRIGGER: int = 6
+ITEM_FAMILY_ATTACK_SPEED: int = 7
+ITEM_FAMILY_MANA: int = 8
+ITEM_FAMILY_SPELL_DAMAGE: int = 9
+ITEM_FAMILY_EXP: int = 10
+ITEM_FAMILY_EXP_GEN: int = 11
+ITEM_FAMILY_GOLD: int = 12
+
+ITEM_FAMILY_DMG_BOSS: int = 13
+ITEM_FAMILY_DMG_MASS: int = 14
+ITEM_FAMILY_DMG_AIR: int = 15
+ITEM_FAMILY_DMG_NATURE: int = 16
+ITEM_FAMILY_DMG_UNDEAD: int = 17
+ITEM_FAMILY_DMG_HUMAN: int = 18
+ITEM_FAMILY_DMG_ORC: int = 19
+ITEM_FAMILY_DMG_MAGIC: int = 20
+
+FAMILY_RULES: Dict[int, FamilyRule] = {
+	ITEM_FAMILY_ITEM_FIND: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_ITEM_QUALITY: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_MAIN_DAMAGE: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_OTHER_DAMAGE: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_BUFF: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_TRIGGER: FamilyRule(
+		downward_impacts={
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_ATTACK_SPEED: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_MANA: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_SPELL_DAMAGE: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_EXP: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_EXP_GEN: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_GOLD: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_BOSS: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_MASS: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_AIR: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_NATURE: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_UNDEAD: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_HUMAN: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_ORC: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+	ITEM_FAMILY_DMG_MAGIC: FamilyRule(
+		downward_impacts={
+			0: {-1: 0.34},
+			1: {-1: 0.5},
+			2: {-1: 1.0},
+		},
+	),
+}
 
 @dataclass(frozen=True)
 class ItemValue:
@@ -163,22 +341,35 @@ class ItemValue:
 			
 			# Check for family shadowing if applicable
 			shadow_count_by_phase = {p: 0.0 for p in range(len(GAME_PHASES))}
-			if family_info:
-				fam_id, tier, _ = family_info
-				# We need to scan inventory for higher tier items of same family
-				for other_id, other_count in inventory.items():
-					if other_count <= 0:
+			family_infos = normalize_family_infos(family_info)
+			if family_infos:
+				for fam_id, tier, _ in family_infos:
+					rule = FAMILY_RULES.get(fam_id)
+					if not rule:
 						continue
-					other_fam_info = get_item_family_info(other_id)
-					if not other_fam_info:
-						continue
-					other_fam_id, other_tier, _ = other_fam_info
-					
-					if other_fam_id == fam_id and other_tier > tier:
-						tier_diff = other_tier - tier
-						rule = FAMILY_RULES.get(fam_id)
-						if rule and tier_diff in rule.downward_impacts:
-							impact_dict = rule.downward_impacts[tier_diff]
+					for other_id, other_count in inventory.items():
+						if other_count <= 0:
+							continue
+						other_infos = get_item_family_infos(other_id)
+						if not other_infos:
+							continue
+						for other_fam_id, other_tier, _ in other_infos:
+							if other_fam_id != fam_id:
+								continue
+							tier_diff = other_tier - tier
+							if tier_diff < 0:
+								continue
+							if tier_diff == 0 and other_id == item_id:
+								continue
+							impact_dict = None
+							if tier_diff in rule.downward_impacts:
+								impact_dict = rule.downward_impacts[tier_diff]
+							else:
+								applicable_diffs = [diff for diff in rule.downward_impacts.keys() if diff <= tier_diff]
+								if applicable_diffs:
+									impact_dict = rule.downward_impacts[max(applicable_diffs)]
+							if impact_dict is None:
+								continue
 							base_impact = impact_dict.get(-1, 0.0)
 							for p in range(len(GAME_PHASES)):
 								impact = base_impact + impact_dict.get(p, 0.0)
@@ -536,100 +727,100 @@ USAGE_ITEM_VALUES: Dict[ITEM_ID, Tuple[GAME_PHASE_VALUE_DICT, Optional[Tuple[int
 
 	## ITEM FIND  / QUALITY
 	# Common items
-	RUSTY_MINING_PICK: ({0: 0.1, 1: 0.1, 2: 0.05}, (1, 0.0), None),
-	YOUNG_THIEF_CLOAK: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0), None),
-	OLD_CRYSTAL_BALL: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0), None),
-	PIRATE_MAP: ({0: 0.55, 1: 0.55, 2: 0.375, 3: 0.275, 4: 0.125, 5: 0.075,}, (2, 0.0), None),
-	RUNED_WOOD: ({-1: 0.35, 4: -0.1, 5: -0.15, 6: -0.25, 7: -0.35, 8: -0.35}, (2, 0.0), None),
-	MINING_LAMP: ({-1: 1.35, 6: -0.35, 7: -0.85, 8: -1.35}, (3, 0.0), None),
+	RUSTY_MINING_PICK: ({0: 0.1, 1: 0.1, 2: 0.05}, (1, 0.0), (ITEM_FAMILY_ITEM_FIND, 1, None)),
+	YOUNG_THIEF_CLOAK: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0), (ITEM_FAMILY_ITEM_QUALITY, 2, None)),
+	OLD_CRYSTAL_BALL: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0), (ITEM_FAMILY_ITEM_FIND, 2, None)),
+	PIRATE_MAP: ({0: 0.55, 1: 0.55, 2: 0.375, 3: 0.275, 4: 0.125, 5: 0.075,}, (2, 0.0), (ITEM_FAMILY_ITEM_FIND, 3, None)),
+	RUNED_WOOD: ({-1: 0.35, 4: -0.1, 5: -0.15, 6: -0.25, 7: -0.35, 8: -0.35}, (2, 0.0), (ITEM_FAMILY_ITEM_QUALITY, 2, None)),
+	MINING_LAMP: ({-1: 1.35, 6: -0.35, 7: -0.85, 8: -1.35}, (3, 0.0), (ITEM_FAMILY_ITEM_FIND, 5, None)),
 
 	# Uncommon items
-	TINY_RABBIT: ({0: 0.1, 1: 0.1, 2: 0.05}, (1, 0.0), None),
-	HUNTING_MAP: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0), None),
-	DOWSING_ROD: ({-1: 0.95, 6: -0.275, 7: -0.775, 8: -0.95}, (3, 0.0), None),
-	SUPPORT_COLUMN: ({0: 0.375, 1: 0.375, 2: 0.375, 3: 0.325, 4: 0.175, 5: 0.075, }, (3, 0.0), None),
-	DUMPSTER: ({-1: 0.575, 6: -0.225, 7: -0.525, 8: -0.575}, (2, 0.0), None),
-	SURVIVAL_KIT: ({0: 0.4, 1: 0.4, 2: 0.375, 3: 0.275, 4: 0.125, 5: 0.05}, (3, 0.0), None),
-	ENCHANTED_TELESCOPE: ({-1: 0.7, 5: -0.2, 6: -0.45, 7: -0.7, 8: -0.7}, (2, 0.0), None),
-	MASTER_THIEF_S_SHROUD: ({-1: 1.0, 6: -0.25, 7: -0.75, 8: -1.0}, (2, 0.0), None),
-	MONOCLE: ({-1: 2.25, 6: -0.25, 7: -0.75, 8: -2.25}, (3, 0.0), None),
-	GRAND_SEAL_OF_PICKINESS: ({-1: 2.75, 6: -0.25, 7: -0.75, 8: -2.75}, (2, 0.0), None),
+	TINY_RABBIT: ({0: 0.1, 1: 0.1, 2: 0.05}, (1, 0.0), [(ITEM_FAMILY_ITEM_FIND, 1, None), (ITEM_FAMILY_ITEM_QUALITY, 1, None)]),
+	HUNTING_MAP: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.1,}, (2, 0.0), (ITEM_FAMILY_ITEM_FIND, 2, None)),
+	DOWSING_ROD: ({-1: 0.95, 6: -0.275, 7: -0.775, 8: -0.95}, (3, 0.0), (ITEM_FAMILY_ITEM_FIND, 5, None)),
+	SUPPORT_COLUMN: ({0: 0.375, 1: 0.375, 2: 0.375, 3: 0.325, 4: 0.175, 5: 0.075, }, (3, 0.0), [(ITEM_FAMILY_ITEM_FIND, 2, None), (ITEM_FAMILY_ITEM_QUALITY, 2, None)]),
+	DUMPSTER: ({-1: 0.575, 6: -0.225, 7: -0.525, 8: -0.575}, (2, 0.0), (ITEM_FAMILY_ITEM_FIND, 3, None)),
+	SURVIVAL_KIT: ({0: 0.4, 1: 0.4, 2: 0.375, 3: 0.275, 4: 0.125, 5: 0.05}, (3, 0.0), [(ITEM_FAMILY_ITEM_FIND, 2, None), (ITEM_FAMILY_ITEM_QUALITY, 2, None)]),
+	ENCHANTED_TELESCOPE: ({-1: 0.7, 5: -0.2, 6: -0.45, 7: -0.7, 8: -0.7}, (2, 0.0), (ITEM_FAMILY_ITEM_FIND, 4, None)),
+	MASTER_THIEF_S_SHROUD: ({-1: 1.0, 6: -0.25, 7: -0.75, 8: -1.0}, (2, 0.0), (ITEM_FAMILY_ITEM_QUALITY, 3, None)),
+	MONOCLE: ({-1: 2.25, 6: -0.25, 7: -0.75, 8: -2.25}, (3, 0.0), [(ITEM_FAMILY_ITEM_FIND, 6, None), (ITEM_FAMILY_ITEM_QUALITY, 5, None)]),
+	GRAND_SEAL_OF_PICKINESS: ({-1: 2.75, 6: -0.25, 7: -0.75, 8: -2.75}, (2, 0.0), (ITEM_FAMILY_ITEM_QUALITY, 5, None)),
 	SPIDER_BROACH: ({-1: 3.0, 6: -0.25, 7: -0.75, 8: -3.0}, (2, 0.0), None),
-	SHADOWFOOT_S_MANTLE: ({-1: 2.25, 6: -0.25, 7: -0.75, 8: -2.25}, (2, 0.0), None),
+	SHADOWFOOT_S_MANTLE: ({-1: 2.25, 6: -0.25, 7: -0.75, 8: -2.25}, (2, 0.0), (ITEM_FAMILY_ITEM_QUALITY, 5, None)),
 
 	# Rare items
-	BLOODTHIRSTY_WHEEL_OF_FORTUNE: ({-1: 1.9, 6: -0.25, 7: -0.7, 8: -2.25}, (2, 0.0), None),
-	ENCHANTED_MINING_PICK: ({-1: 2.45, 6: -0.25, 7: -0.75, 8: -2.45}, (2, 0.0), None),
+	BLOODTHIRSTY_WHEEL_OF_FORTUNE: ({-1: 1.9, 6: -0.25, 7: -0.7, 8: -1.9}, (2, 0.0), (ITEM_FAMILY_ITEM_FIND, 6, None)),
+	ENCHANTED_MINING_PICK: ({-1: 2.45, 6: -0.25, 7: -0.75, 8: -2.45}, (2, 0.0), (ITEM_FAMILY_ITEM_FIND, 6, None)),
 
 	# Unique items
 	BACKPACK: ({0: 1.0, 1: 1.0, 2: 1.0, 3: 0.75, 4: 0.5, 5: 0.5, 6: 0.25}, (2, 0.0), None),
-	WORKBENCH: ({0: 3.5, 1: 3.4, 2: 3.25, 3: 3.05, 4: 2.8, 5: 2.5, 6: 2.25, 7: 0.5, 8: 0.0}, (2, 0.0), None),
+	WORKBENCH: ({0: 3.5, 1: 3.4, 2: 3.25, 3: 3.05, 4: 2.8, 5: 2.5, 6: 2.25, 7: 0.5, 8: 0.0}, (2, 0.0), (ITEM_FAMILY_ITEM_QUALITY, 6, None)),
 	POCKET_EMPORIUM: ({0: 2.5, 1: 2.5, 2: 2.5, 3: 2.25, 4: 2.0, 5: 1.75, 6: 1.35, 7: 0.5, 8: 0}, (5, 0.0), None),
 	SPELLBOOK_OF_ITEM_MASTERY: ({0: 4.0, 1: 4.0, 2: 3.75, 4: 3.4, 5: 3., 6: 2.5, 7: 0.9, 8: 0.0}, (3, 0.0), None),
 
 	## DAMAGE
 	# Common items
-	SKULL_TROPHY: ({0: 0.2, 1: 0.1,}, (2, 0.0), None),
-	SCARAB_AMULET: ({0: 0.1, 1: 0.1}, (1, 0.0), None),
-	MAGIC_GLOVES: ({0: 0.275, 1: 0.2, 2: 0.1,}, (1, 0.0), None),
-	LAND_MINE: ({0: 0.15, 1: 0.15, 2: 0.05, 3: 0.05}, (1, 0.0), None),
-	ORC_WAR_SPEAR: ({0: 0.2, 1: 0.15, 2: 0.125, 3: 0.1, 4: 0.05,}, (1, 0.0), None),
-	PIECE_OF_MEAT: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.2, 4: 0.15, 5: 0.1}, (2, 0.0), None),
-	TOOTH_TROPHY: ({0: 0.4, 1: 0.4, 2: 0.35, 3: 0.25, 4: 0.125, 5: 0.05,}, (3, 0.0), None),
-	CLAWS_OF_ATTACK: ({0: 0.2, 1: 0.15, 2: 0.125, 3: 0.1, 4: 0.05,}, (1, 0.0), None),
-	HEAVY_CROSSBOW: ({0: 0.35, 1: 0.35, 2: 0.35, 3: 0.15, 4: 0.1,}, (1, 0.0), None),
+	SKULL_TROPHY: ({0: 0.2, 1: 0.1,}, (2, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 1, None)),
+	SCARAB_AMULET: ({0: 0.1, 1: 0.1}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 1, None)),
+	MAGIC_GLOVES: ({0: 0.275, 1: 0.2, 2: 0.1,}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 2, None)),
+	LAND_MINE: ({0: 0.15, 1: 0.15, 2: 0.05, 3: 0.05}, (1, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 2, None), (ITEM_FAMILY_OTHER_DAMAGE, 1, None)]),
+	ORC_WAR_SPEAR: ({0: 0.2, 1: 0.15, 2: 0.125, 3: 0.1, 4: 0.05,}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 2, None)),
+	PIECE_OF_MEAT: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.2, 4: 0.15, 5: 0.1}, (2, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 2, None)),
+	TOOTH_TROPHY: ({0: 0.4, 1: 0.4, 2: 0.35, 3: 0.25, 4: 0.125, 5: 0.05,}, (3, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 2, None), (ITEM_FAMILY_OTHER_DAMAGE, 1, None)]),
+	CLAWS_OF_ATTACK: ({0: 0.2, 1: 0.15, 2: 0.125, 3: 0.1, 4: 0.05,}, (1, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 2, None), (ITEM_FAMILY_OTHER_DAMAGE, 1, None)]),
+	HEAVY_CROSSBOW: ({0: 0.35, 1: 0.35, 2: 0.35, 3: 0.15, 4: 0.1,}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 2, None)),
 
 	# Uncommon items
-	BLASTER_STAFF: ({0: 0.15, 1: 0.05,}, (2, 0.0), None),
-	UNYIELDING_MAUL: ({0: 0.15, 1: 0.1, 2: 0.075, 3: 0.05,}, (1, 0.0), None),
-	RAZOR_SHARP_DAGGER: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), None),
-	BLOODTHIRSTY_AXE: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), None),
-	CLAWS_OF_THE_BEAR: ({0: 0.1, 1: 0.1, 2: 0.05}, (1, 0.0), None),
-	WINE_OF_ALUQAH: ({0: 0.3, 1: 0.3, 2: 0.175, 3: 0.15, 4: 0.1, 5: 0.05}, (2, 0.0), None),
-	ZOMBIE_HEAD: ({-1: 0.65}, (3, 0.0), None),
-	BATTLE_SUIT: ({0: 0.35, 1: 0.35, 2: 0.35, 3: 0.2, 4: 0.125, 5: 0.05}, (2, 0.0), None),
-	HEAVY_GUN: ({-1: 0.65, 6: -0.2, 7: -0.4, 8: -0.6}, (3, 0.0), None),
-	POLARISATOR: ({-1: 0.2, 6: -0.1, 7: -0.2, 8: -0.2}, (1, 0.0), None),
-	DRAGON_CLAWS: ({-1: 0.2, 6: -0.125, 7: -0.2, 8: -0.2}, (1, 0.0), None),
-	DRAGON_S_HEART: ({-1: 0.3, 6: -0.1, 7: -0.25, 8: -0.25}, (1, 0.0), None),
-	NAGA_TRIDENT: ({-1: 0.4, 6: -0.1, 7: -0.225, 8: -0.25}, (2, 0.0), None),
+	BLASTER_STAFF: ({0: 0.15, 1: 0.05,}, (2, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 1, None)),
+	UNYIELDING_MAUL: ({0: 0.15, 1: 0.1, 2: 0.075, 3: 0.05,}, (1, 0.0),  [(ITEM_FAMILY_MAIN_DAMAGE, 2, None), (ITEM_FAMILY_OTHER_DAMAGE, 1, None)]),
+	RAZOR_SHARP_DAGGER: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 2, None)),
+	BLOODTHIRSTY_AXE: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 2, None)),
+	CLAWS_OF_THE_BEAR: ({0: 0.1, 1: 0.1, 2: 0.05}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 1, None)),
+	WINE_OF_ALUQAH: ({0: 0.3, 1: 0.3, 2: 0.175, 3: 0.15, 4: 0.1, 5: 0.05}, (2, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 3, None), (ITEM_FAMILY_OTHER_DAMAGE, 2, None)]),
+	ZOMBIE_HEAD: ({-1: 0.65}, (3, 0.0), (ITEM_FAMILY_OTHER_DAMAGE, 5, None)),
+	BATTLE_SUIT: ({0: 0.35, 1: 0.35, 2: 0.35, 3: 0.2, 4: 0.125, 5: 0.05}, (2, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 3, None)),
+	HEAVY_GUN: ({-1: 0.65, 6: -0.2, 7: -0.4, 8: -0.6}, (3, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 4, None), (ITEM_FAMILY_OTHER_DAMAGE, 4, None)]),
+	POLARISATOR: ({-1: 0.2, 6: -0.1, 7: -0.2, 8: -0.2}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 3, None)),
+	DRAGON_CLAWS: ({-1: 0.2, 6: -0.125, 7: -0.2, 8: -0.2}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 3, None)),
+	DRAGON_S_HEART: ({-1: 0.3, 6: -0.1, 7: -0.25, 8: -0.25}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 4, None)),
+	NAGA_TRIDENT: ({-1: 0.4, 6: -0.1, 7: -0.225, 8: -0.25}, (2, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 5, None)),
 	
-	MINI_TANK: ({-1: 0.8, 6: -0.2, 7: -0.4, 8: -0.75}, (2, 0.0), None),
-	BEAST_HEAD: ({-1: 0.8, 6: -0.2, 7: -0.4, 8: -0.75}, (2, 0.0), None),
+	MINI_TANK: ({-1: 0.8, 6: -0.2, 7: -0.4, 8: -0.75}, (2, 0.0), (ITEM_FAMILY_OTHER_DAMAGE, 3, None)),
+	BEAST_HEAD: ({-1: 0.8, 6: -0.2, 7: -0.4, 8: -0.75}, (2, 0.0), (ITEM_FAMILY_OTHER_DAMAGE, 3, None)),
 
 	# Rare items
 	PURIFYING_GLOVES: ({-1: 0.05, 0: 0.2, 1: 0.15, 2: 0.1,}, (2, 0.0), None),
-	LIQUID_GOLD: ({0: 0.2, 1: 0.15, 2: 0.125, 3: 0.1, 4: 0.05}, (1, 0.0), None),
-	FIST_OF_DOOM: ({-1: 0.4, 5: -0.1, 6: -0.2, 7: -0.35, 8: -0.4}, (1, 0.0), None),
+	LIQUID_GOLD: ({0: 0.2, 1: 0.15, 2: 0.125, 3: 0.1, 4: 0.05}, (1, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 2, None), (ITEM_FAMILY_OTHER_DAMAGE, 1, None)]),
+	FIST_OF_DOOM: ({-1: 0.4, 5: -0.1, 6: -0.2, 7: -0.35, 8: -0.4}, (1, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 3, None), (ITEM_FAMILY_OTHER_DAMAGE, 1, None)]),
 	HIPPOGRYPH_EGG: ({0: 0.4, 1: 0.4, 2: 0.4, 3: 0.3, 4: 0.25, 5: 0.1,}, (1, 0.0), None),
 
 	SIGN_OF_ENERGY_INFUSION: ({-1: 0.4}, (3, 0.0), None),
 	OPTIMIST_S_PRESERVED_FACE: ({-1: 0.4, 6: -0.15, 7: -0.25, 8: -0.3}, (1, 0.0), None),
 	GRANITE_HAMMER: ({-1: 0.2, 6: -0.1, 7: -0.2, 8: -0.2}, (1, 0.0), None),
 	BARTUC_S_SPIRIT: ({0: 0.45, 1: 0.45, 2: 0.45, 3: 0.325, 4: 0.25, 5: 0.1}, (1, 0.0), None),
-	CLAWS_OF_URSUS: ({0: 0.3, 1: 0.3, 2: 0.25, 3: 0.2, 4: 0.15, 5: 0.1,}, (1, 0.0), None),
-	NEVER_ENDING_KEG: ({-1: 0.25, 6: -0.15, 7: -0.25, 8: -0.25}, (1, 0.0), None),
-	SILVER_ARMOR: ({-1: 0.05, 6: -0.05, 7: -0.05, 8: -0.05}, (1, 0.0), None),
-	ELITE_SHARP_SHOOTER: ({-1: 0.5, 7: -0.1, 8: -0.2}, (1, 0.0), None),
-	SPEAR_OF_THE_MALPHAI: ({-1: 0.5, 7: -0.1, 8: -0.2}, (1, 0.0), None),
+	CLAWS_OF_URSUS: ({0: 0.3, 1: 0.3, 2: 0.25, 3: 0.2, 4: 0.15, 5: 0.1,}, (1, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 2, None), (ITEM_FAMILY_OTHER_DAMAGE, 1, None)]),
+	NEVER_ENDING_KEG: ({-1: 0.25, 6: -0.15, 7: -0.25, 8: -0.25}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 4, None)),
+	SILVER_ARMOR: ({-1: 0.05, 6: -0.05, 7: -0.05, 8: -0.05}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 3, None)),
+	ELITE_SHARP_SHOOTER: ({-1: 0.5, 7: -0.1, 8: -0.2}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 5, None)),
+	SPEAR_OF_THE_MALPHAI: ({-1: 0.5, 7: -0.1, 8: -0.2}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 5, None)),
 	LUCKY_DICE: ({-1: 0.55, 7: -0.1, 8: -0.25,}, (2, 0.0), None),
-	TOY_BOY: ({-1: 0.5, 6: -0.15, 7: -0.35, 8: -0.475}, (1, 0.0), None),
-	AMULET_OF_STRENGTH: ({-1: 0.9, 6: -0.2, 7: -0.4, 8: -0.8}, (1, 0.0), None),
-	ETERNIUM_BLADE: ({-1: 1.75, 7: -0.25, 8: -0.75}, (2, 0.0), None),
+	TOY_BOY: ({-1: 0.5, 6: -0.15, 7: -0.35, 8: -0.475}, (1, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 5, None), (ITEM_FAMILY_OTHER_DAMAGE, 4, None)]),
+	AMULET_OF_STRENGTH: ({-1: 0.9, 6: -0.2, 7: -0.4, 8: -0.8}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 4, None)),
+	ETERNIUM_BLADE: ({-1: 1.75, 7: -0.25, 8: -0.75}, (2, 0.0), (ITEM_FAMILY_OTHER_DAMAGE, 5, None)),
 
 	# Unique items
 	HELM_OF_INSANITY: ({-1: 0.6, 6: -0.25, 7: -0.6, 8: -0.6}, (1, 0.0), None),
-	JUNGLE_STALKER_S_DOLL: ({-1: 0.15, 5: -0.05, 6: -0.1, 7: -0.15, 8: -0.15}, (1, 0.0), None),
-	CRIT_BLADE: ({-1: 0.475, 6: -0.2, 7: -0.325, 8: - 0.375}, (1, 0.0), None),
+	JUNGLE_STALKER_S_DOLL: ({-1: 0.15, 5: -0.05, 6: -0.1, 7: -0.15, 8: -0.15}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 3, None)),
+	CRIT_BLADE: ({-1: 0.475, 6: -0.2, 7: -0.325, 8: - 0.375}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 5, None)),
 	DAGGER_OF_BANE: ({-1: 2.25, 7: -0.7, 8: -1.6}, (1, 0.0), None),
 	BONK_S_FACE: ({-1: 1.75, 7: -0.6, 8: -1.3}, (1, 0.0), None),
 	OVERCHARGE_SHOT: ({-1: 3.25, }, (1, 0.0), None),
-	MINI_FOREST_TROLL: ({-1: 0.85, 7: -0.1, 8: -0.3}, (1, 0.0), None),
+	MINI_FOREST_TROLL: ({-1: 0.85, 7: -0.1, 8: -0.3}, (1, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 6, None)),
 	ELUNES_BOW: ({-1: 0.75, 6: -0.25, 7: -0.4, 8: -0.55}, (1, 0.0), None),
-	SOUL_COLLECTOR_S_SCYTHE: ({-1: 2.25, 7: -0.5, 8: -2.25}, (2, 0.0), None),
-	SOUL_COLLECTORS_CLOAK: ({-1: 2.25, 7: -0.5, 8: -2.25}, (2, 0.0), None),
+	SOUL_COLLECTOR_S_SCYTHE: ({-1: 2.25, 7: -0.5, 8: -2.25}, (2, 0.0), (ITEM_FAMILY_MAIN_DAMAGE, 6, None)),
+	SOUL_COLLECTORS_CLOAK: ({-1: 2.25, 7: -0.5, 8: -2.25}, (2, 0.0), (ITEM_FAMILY_OTHER_DAMAGE, 5, None)),
 	CHAMELEON_GLAIVE: ({-1: 2.75, 7: -0.25, 8: -0.5}, (1, 0.0), None),
-	SPEAR_OF_LOKI: ({-1: 0.4, 6: -0.2, 7: -0.4, 8: -0.4}, (1, 0.0), None),
+	SPEAR_OF_LOKI: ({-1: 0.4, 6: -0.2, 7: -0.4, 8: -0.4}, (1, 0.0), [(ITEM_FAMILY_MAIN_DAMAGE, 5, None), (ITEM_FAMILY_OTHER_DAMAGE, 3, None)]),
 	GROUNDING_GLOVES: ({-1: 0.65, 4: -0.05, 5: -0.1, 6: -0.15, 7: -0.25, 8: -0.25}, (2, 0.0), None),
 	FROG_PIPE: ({-1: 3.25}, (1, 0.0), None),
 	FRAGMENTATION_ROUND: ({-1: 4.5}, (1, 0.0), None),
@@ -643,114 +834,110 @@ USAGE_ITEM_VALUES: Dict[ITEM_ID, Tuple[GAME_PHASE_VALUE_DICT, Optional[Tuple[int
 	## BUFFS
 
 	# Uncommon items
-	TOME_OF_SHADOW_MAGIC: ({-1: 0.2, 5: -0.05, 6: -0.1, 7: -0.125, 8: -0.175}, (5, 0.0), None),
-	MAGIC_VIAL: ({-1: 0.25, 5: -0.025, 6: -0.075, 7: -0.125, 8: -0.25}, (5, 0.0), None),
-	HERMIT_STAFF: ({-1: 0.575, 6: -0.075, 7: -0.125, 8: -0.35}, (4, 0.0), None),
-	ZOMBIE_HAND: ({-1: 0.875, 6: -0.125, 7: -0.2, 8: -0.55}, (4, 0.0), None),
-	TROLL_CHARM: ({-1: 0.5, 6: -0.1, 7: -0.15, 8: -0.35}, (5, 0.0), None),
-	PANDA_DRESS: ({-1: 2.0, 7: -0.25, 8: -0.5}, (4, 0.0), None),
+	TOME_OF_SHADOW_MAGIC: ({-1: 0.2, 5: -0.05, 6: -0.1, 7: -0.125, 8: -0.175}, (5, 0.0), (ITEM_FAMILY_BUFF, 1, None)),
+	MAGIC_VIAL: ({-1: 0.25, 5: -0.025, 6: -0.075, 7: -0.125, 8: -0.25}, (5, 0.0), (ITEM_FAMILY_BUFF, 1, None)),
+	HERMIT_STAFF: ({-1: 0.575, 6: -0.075, 7: -0.125, 8: -0.35}, (4, 0.0), (ITEM_FAMILY_BUFF, 2, None)),
+	ZOMBIE_HAND: ({-1: 0.875, 6: -0.125, 7: -0.2, 8: -0.55}, (4, 0.0), (ITEM_FAMILY_BUFF, 3, None)),
+	TROLL_CHARM: ({-1: 0.5, 6: -0.1, 7: -0.15, 8: -0.35}, (5, 0.0), (ITEM_FAMILY_BUFF, 2, None)),
+	PANDA_DRESS: ({-1: 2.0, 7: -0.25, 8: -0.5}, (4, 0.0), [(ITEM_FAMILY_BUFF, 5, None), (ITEM_FAMILY_TRIGGER, 5, None)]),
 
 	# Rare items
-	LOVE_POTION: ({-1: 1.85, 7: -0.25, 8: -0.5}, (4, 0.0), None),
-	PHOENIX_EGG: ({-1: 0.5, 6: -0.1, 7: -0.15, 8: -0.35}, (5, 0.0), None),
+	LOVE_POTION: ({-1: 1.85, 7: -0.25, 8: -0.5}, (4, 0.0), (ITEM_FAMILY_BUFF, 4, None)),
+	PHOENIX_EGG: ({-1: 0.5, 6: -0.1, 7: -0.15, 8: -0.35}, (5, 0.0), (ITEM_FAMILY_BUFF, 3, None)),
 	
 	
 	## TRIGGERS
 	# Common items
-	RING_OF_LUCK: ({0: 0.1, 1: 0.1, 2: 0.1, 3: 0.05}, (2, 0.0), None),
-	ELEGANT_RING: ({0: 0.375, 1: 0.375, 2: 0.375, 3: 0.35, 4: 0.225, 5: 0.2, 6: 0.05,}, (4, 0.0), None),
-	MINI_SHEEP: ({0: 0.175, 1: 0.175, 2: 0.175, 3: 0.15, 4: 0.1, 5: 0.05,}, (2, 0.0), None),
-	ENCHANTED_BIRD_FIGURINE: ({-1: 0.8, 6: -0.1, 7: -0.3, 8: -0.55}, (4, 0.0), None),
+	RING_OF_LUCK: ({0: 0.1, 1: 0.1, 2: 0.1, 3: 0.05}, (2, 0.0), (ITEM_FAMILY_TRIGGER, 1, None)),
+	ELEGANT_RING: ({0: 0.375, 1: 0.375, 2: 0.375, 3: 0.35, 4: 0.225, 5: 0.2, 6: 0.05,}, (4, 0.0), (ITEM_FAMILY_TRIGGER, 2, None)),
+	MINI_SHEEP: ({0: 0.175, 1: 0.175, 2: 0.175, 3: 0.15, 4: 0.1, 5: 0.05,}, (2, 0.0), (ITEM_FAMILY_TRIGGER, 2, None)),
+	ENCHANTED_BIRD_FIGURINE: ({-1: 0.8, 6: -0.1, 7: -0.3, 8: -0.55}, (4, 0.0), [(ITEM_FAMILY_BUFF, 3, None), (ITEM_FAMILY_TRIGGER, 3, None)]),
 
 	# Uncommon items
-	SHINY_EMERALD: ({-1: 0.5, 6: -0.1, 7: -0.25, 8: -0.425}, (5, 0.0), None),
-	RING_OF_CHANCE: ({-1: 0.35, 5: -0.075, 6: -0.125, 7: -0.225, 8: -0.325}, (4, 0.0), None),
-	ARCHER_S_HOOD: ({-1: 0.425, 5: -0.075, 6: -0.15, 7: -0.3, 8: -0.4}, (3, 0.0), None),
-	MINDS_KEY: ({-1: 0.5, 6: -0.1, 7: -0.25, 8: -0.425}, (5, 0.0), None),
+	SHINY_EMERALD: ({-1: 0.5, 6: -0.1, 7: -0.25, 8: -0.425}, (5, 0.0), (ITEM_FAMILY_TRIGGER, 4, None)),
+	RING_OF_CHANCE: ({-1: 0.35, 5: -0.075, 6: -0.125, 7: -0.225, 8: -0.325}, (4, 0.0), (ITEM_FAMILY_TRIGGER, 3, None)),
+	ARCHER_S_HOOD: ({-1: 0.425, 5: -0.075, 6: -0.15, 7: -0.3, 8: -0.4}, (3, 0.0), [(ITEM_FAMILY_TRIGGER, 3, None), (ITEM_FAMILY_ATTACK_SPEED, 3, None)]),
+	MINDS_KEY: ({-1: 0.5, 6: -0.1, 7: -0.25, 8: -0.425}, (5, 0.0), (ITEM_FAMILY_TRIGGER, 4, None)),
 
 	# Rare items
-	CRESCENT_STONE: ({-1: 0.25, 5: -0.05, 6: -0.1, 7: -0.2, 8: -0.225}, (2, 0.0), None),
-	SHACKLES_OF_TIME: ({-1: 0.95, 7: -0.1, 8: -0.35}, (4, 0.0), None),
+	CRESCENT_STONE: ({-1: 0.25, 5: -0.05, 6: -0.1, 7: -0.2, 8: -0.225}, (2, 0.0), (ITEM_FAMILY_TRIGGER, 2, None)),
+	SHACKLES_OF_TIME: ({-1: 0.95, 7: -0.1, 8: -0.35}, (4, 0.0), (ITEM_FAMILY_TRIGGER, 4, None)),
 
 
 	## Attack speed
 	# Common items
-	ELECTRIFIED_HORSESHOE: ({-1: 0.325, 6: -0.225, 7: -0.325, 8: -0.325}, (3, 0.0), None),
+	ELECTRIFIED_HORSESHOE: ({-1: 0.325, 6: -0.225, 7: -0.325, 8: -0.325}, (3, 0.0), (ITEM_FAMILY_ATTACK_SPEED, 2, None)),
 
 	# Uncommon items
-	QUICKTRIGGER_BLADE: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (2, 0.0), None),
-	GLOWING_GAUNTLETS: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (2, 0.0), None),
-	LIGHTNING_BOOTS: ({-1: 0.5, 6: -0.1, 7: -0.2, 8: -0.25}, (4, 0.0), None),
-	FLAMING_ARROW: ({-1: 0.25, 6: -0.2, 7: -0.25, 8: -0.25}, (2, 0.0), None),
-	VULSHOK_S_CLAWS: ({-1: 0.35, 6: -0.2, 7: -0.325, 8: -0.35}, (2, 0.0), None),
+	QUICKTRIGGER_BLADE: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (2, 0.0), (ITEM_FAMILY_ATTACK_SPEED, 1, None)),
+	GLOWING_GAUNTLETS: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (2, 0.0), (ITEM_FAMILY_ATTACK_SPEED, 1, None)),
+	LIGHTNING_BOOTS: ({-1: 0.5, 6: -0.1, 7: -0.2, 8: -0.25}, (4, 0.0), (ITEM_FAMILY_ATTACK_SPEED, 4, None)),
+	FLAMING_ARROW: ({-1: 0.25, 6: -0.2, 7: -0.25, 8: -0.25}, (2, 0.0), (ITEM_FAMILY_ATTACK_SPEED, 2, None)),
+	VULSHOK_S_CLAWS: ({-1: 0.35, 6: -0.2, 7: -0.325, 8: -0.35}, (2, 0.0), (ITEM_FAMILY_ATTACK_SPEED, 2, None)),
 	
 	# Rare items
 	BALL_LIGHTNING: ({-1: 0.1, 6: -0.05, 7: -0.1, 8: -0.1}, (1, 0.0), None),
-	ENCHANTED_GEAR: ({-1: 0.5, 6: -0.1, 7: -0.25, 8: -0.425}, (3, 0.0), None),
+	ENCHANTED_GEAR: ({-1: 0.5, 6: -0.1, 7: -0.25, 8: -0.425}, (3, 0.0), [(ITEM_FAMILY_TRIGGER, 3, None), (ITEM_FAMILY_ATTACK_SPEED, 3, None)]),
 
 	# Unique items
 	DARK_MATTER_TRIDENT: ({-1: 0.5, 6: -0.1, 7: -0.2, 8: -0.25}, (4, 0.0), None),
 	JAH_RAKAL_S_FURY: ({-1: 0.15, 5: -0.05, 6: -0.1, 7: -0.15, 8: -0.15}, (1, 0.0), None),
-	ELUNES_QUIVER: ({-1: 0.95, 7: -0.15, 8: -0.2}, (4, 0.0), None),
-	PENDANT_OF_PROMPTNESS: ({-1: 0.25}, (1, 0.0), None),
-
-
-	
-
+	ELUNES_QUIVER: ({-1: 0.95, 7: -0.15, 8: -0.2}, (4, 0.0), (ITEM_FAMILY_ATTACK_SPEED, 5, None)),
+	PENDANT_OF_PROMPTNESS: ({-1: 0.25,}, (1, 0.0), None),
 	
 
 	## Targeted damage mods
 	# Common items
-	VOID_VIAL: ({-1: 0.1, 4: -0.05, 5: -0.1, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), None),
-	ASSASINATION_ARROW: ({0: 0.05, 1: 0.05}, (1, 0.0), None),
-	SPIDER_SILK: ({-1: 0.15, 6: -0.1, 7: -0.15, 8: -0.15}, (1, 0.0), None),
-	GARGOYLE_WING: ({-1: 0.5, 7: -0.4, 8: -0.4}, (1, 0.0), None),
-	NINJA_GLAIVE: ({0: 0.15, 1: 0.15, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05,}, (1, 0.0), None),
-	BOMB_SHELLS: ({-1: 0.25, 6: -0.125, 7: -0.225, 8: -0.225}, (1, 0.0), None),
-	SHIMMERWEED: ({-1: 0.25, 6: -0.125, 7: -0.175, 8: -0.25}, (1, 0.0), None),
-	RAILGUN: ({-1: 0.35, 6: -0.25, 7: -0.35, 8: -0.35}, (1, 0.0), None),
-	SACRED_HALO: ({-1: 0.45, 6: -0.2, 7: -0.4, 8: -0.45}, (1, 0.0), None),
+	VOID_VIAL: ({-1: 0.1, 4: -0.05, 5: -0.1, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), (ITEM_FAMILY_DMG_MAGIC, 1, None)),
+	ASSASINATION_ARROW: ({0: 0.05, 1: 0.05}, (1, 0.0), (ITEM_FAMILY_DMG_BOSS, 1, None)),
+	SPIDER_SILK: ({-1: 0.15, 6: -0.1, 7: -0.15, 8: -0.15}, (1, 0.0), (ITEM_FAMILY_DMG_AIR, 1, None)),
+	GARGOYLE_WING: ({-1: 0.5, 7: -0.4, 8: -0.4}, (1, 0.0), (ITEM_FAMILY_DMG_AIR, 2, None)),
+	NINJA_GLAIVE: ({0: 0.15, 1: 0.15, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05,}, (1, 0.0), (ITEM_FAMILY_DMG_BOSS, 2, None)),
+	BOMB_SHELLS: ({-1: 0.25, 6: -0.125, 7: -0.225, 8: -0.225}, (1, 0.0), (ITEM_FAMILY_DMG_MASS, 2, None)),
+	SHIMMERWEED: ({-1: 0.25, 6: -0.125, 7: -0.175, 8: -0.25}, (1, 0.0), (ITEM_FAMILY_DMG_ORC, 2, None)),
+	RAILGUN: ({-1: 0.35, 6: -0.25, 7: -0.35, 8: -0.35}, (1, 0.0), (ITEM_FAMILY_DMG_HUMAN, 2, None)),
+	SACRED_HALO: ({-1: 0.45, 6: -0.2, 7: -0.4, 8: -0.45}, (1, 0.0), (ITEM_FAMILY_DMG_UNDEAD, 2, None)),
 
 	# Uncommon items
-	FIERY_ASSASSINATION_ARROW: ({0: 0.05, 1: 0.05}, (1, 0.0), None),
+	FIERY_ASSASSINATION_ARROW: ({0: 0.05, 1: 0.05}, (1, 0.0), (ITEM_FAMILY_DMG_BOSS, 1, None)),
 	SCROLL_OF_PIERCING_MAGIC: ({-1: 0.2, 5: -0.05, 6: -0.1, 7: -0.2, 8: -0.2}, (1, 0.0), None),
 	AQUEOUS_VAPOR: ({-1: 0.15, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (1, 0.0), None),
 	DEEP_SHADOWS: ({-1: 0.15, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (1, 0.0), None),
 	UNSTABLE_CURRENT: ({-1: 0.15, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (1, 0.0), None),
 	SHRAPNEL_AMMUNITION: ({-1: 0.15, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (1, 0.0), None),
 
-	HAND_OF_RUIN: ({0: 0.1, 1: 0.1, 2: 0.1, 3: 0.1, 4: 0.05,}, (1, 0.0), None),
-	AXE_OF_DECAPITATION: ({-1: 0.35, 6: -0.2, 7: -0.3, 8: -0.35}, (1, 0.0), None),
-	TOXIC_CHEMICALS: ({-1: 0.225, 5: -0.125, 6: -0.15, 7: -0.225, 8: -0.225}, (1, 0.0), None),
+	HAND_OF_RUIN: ({0: 0.1, 1: 0.1, 2: 0.1, 3: 0.1, 4: 0.05,}, (2, 0.0), [(ITEM_FAMILY_DMG_NATURE, 1, None), (ITEM_FAMILY_DMG_ORC, 1, None), (ITEM_FAMILY_DMG_HUMAN, 1, None)]),
+	AXE_OF_DECAPITATION: ({-1: 0.35, 6: -0.2, 7: -0.3, 8: -0.35}, (1, 0.0), (ITEM_FAMILY_DMG_HUMAN, 2, None)),
+	TOXIC_CHEMICALS: ({-1: 0.225, 5: -0.125, 6: -0.15, 7: -0.225, 8: -0.225}, (1, 0.0), (ITEM_FAMILY_DMG_NATURE, 2, None)),
 
 	BONES_OF_ESSENCE: ({-1: 0.15, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (1, 0.0), None),
-	COMBAT_GLOVES: ({-1: 0.4, 6: -0.15, 7: -0.35, 8: -0.4}, (1, 0.0), None),
+	COMBAT_GLOVES: ({-1: 0.4, 6: -0.15, 7: -0.35, 8: -0.4}, (2, 0.0), [(ITEM_FAMILY_DMG_UNDEAD, 2, None), (ITEM_FAMILY_DMG_ORC, 2, None)]),
 	MASK_OF_SANITY: ({-1: 0.475, 6: -0.175, 7: -0.375, 8: -0.425}, (1, 0.0), None),
 
-	OGRE_BATTLE_AXE: ({-1: 0.35, 6: -0.3, 7: -0.35, 8: -0.35}, (1, 0.0), None),
-	CRYSTAL_STAFF: ({-1: 0.375, 6: -0.3, 7: -0.375, 8: -0.375}, (1, 0.0), None),
+	OGRE_BATTLE_AXE: ({-1: 0.35, 6: -0.3, 7: -0.35, 8: -0.35}, (1, 0.0), (ITEM_FAMILY_DMG_HUMAN, 2, None)),
+	CRYSTAL_STAFF: ({-1: 0.375, 6: -0.3, 7: -0.375, 8: -0.375}, (1, 0.0), [(ITEM_FAMILY_DMG_UNDEAD, 2, None), (ITEM_FAMILY_SPELL_DAMAGE, 2, None)]),
 
 	# Rare items
 	BRIMSTONE_HELMET: ({-1: 0.15, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (1, 0.0), None),
 	LICH_MASK: ({-1: 0.15, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (1, 0.0), None),
 	PHASE_GLOVES: ({-1: 0.4, 7: -0.15, 8: -0.3}, (1, 0.0), None),
 
-	EL_BASTARDO: ({-1: 0.85, 6: -0.15, 7: -0.25, 8: -0.35}, (1, 0.0), None),
-	SCEPTER_OF_THE_LUNAR_LIGHT: ({-1: 0.35, 6: -0.25, 7: -0.3, 8: -0.325}, (1, 0.0), None),
-	THE_SUCONA: ({-1: 0.5}, (1, 0.0), None),
+	EL_BASTARDO: ({-1: 0.85, 6: -0.15, 7: -0.25, 8: -0.35}, (4, 0.0), [(ITEM_FAMILY_DMG_BOSS, 3, None), (ITEM_FAMILY_DMG_UNDEAD, 2, None), (ITEM_FAMILY_DMG_ORC, 3, None), (ITEM_FAMILY_MAIN_DAMAGE, 5, None)]),
+	SCEPTER_OF_THE_LUNAR_LIGHT: ({-1: 0.35, 6: -0.25, 7: -0.3, 8: -0.325}, (2, 0.0), [(ITEM_FAMILY_DMG_MAGIC, 2, None), (ITEM_FAMILY_SPELL_DAMAGE, 3, None)]),
+	THE_SUCONA: ({-1: 0.5}, (1, 0.0), (ITEM_FAMILY_DMG_NATURE, 3, None)),
 
 
 	## MANA
 	# Common items
-	SCROLL_OF_MYTHS: ({-1: 0.1, 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.05, 8: -0.05}, (5, 0.0), None),
-	MAGICAL_ESSENCE: ({-1: 0.075, 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.05, 8: -0.05}, (5, 0.0), None),
-	TROLL_VOODOO_MASK: ({-1: 0.25, 1: 0.15, 2: 0.15, 3: 0.15, 4: 0.1, 5: 0.1, 6: 0.05, 7: -0.05, 8: -0.1}, (5, 0.0), None),
+	SCROLL_OF_MYTHS: ({-1: 0.1, 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.05, 8: -0.05}, (5, 0.0), (ITEM_FAMILY_MANA, 1, None)),
+	MAGICAL_ESSENCE: ({-1: 0.075, 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.05, 8: -0.05}, (5, 0.0), (ITEM_FAMILY_MANA, 1, None)),
+	TROLL_VOODOO_MASK: ({-1: 0.25, 1: 0.15, 2: 0.15, 3: 0.15, 4: 0.1, 5: 0.1, 6: 0.05, 7: -0.05, 8: -0.1}, (5, 0.0), (ITEM_FAMILY_MANA, 2, None)),
 	
 	# Uncommon items
-	TOUCH_OF_A_SPIRIT: ({-1: 0.2, 7: -0.05, 8: -0.1}, (5, 0.0), None),
+	TOUCH_OF_A_SPIRIT: ({-1: 0.2, 7: -0.05, 8: -0.1}, (5, 0.0), (ITEM_FAMILY_MANA, 3, None)),
 	WIZARD_STAFF: ({-1: 0.25, 6: -0.1, 7: -0.2, 8: -0.225}, (1, 0.0), None),
-	ANCIENT_FIGURINE: ({-1: 0.4, 7: -0.15, 8: -0.2}, (5, 0.0), None),
-	SAGE_S_MASK: ({-1: 0.55, 7: -0.1, 8: -0.15}, (5, 0.0), None),
+	ANCIENT_FIGURINE: ({-1: 0.4, 7: -0.15, 8: -0.2}, (5, 0.0), (ITEM_FAMILY_MANA, 4, None)),
+	SAGE_S_MASK: ({-1: 0.55, 7: -0.1, 8: -0.15}, (5, 0.0), (ITEM_FAMILY_MANA, 4, None)),
 
 	# Rare items
 	MANA_STONE: ({-1: 0.15, 7: -0.05, 8: -0.1}, (2, 0.0), None),
@@ -759,79 +946,79 @@ USAGE_ITEM_VALUES: Dict[ITEM_ID, Tuple[GAME_PHASE_VALUE_DICT, Optional[Tuple[int
 	# Unique items
 	VAMPIRIC_SKULL: ({-1: 1.0}, (1, 0.0), None),
 	CIRCLE_OF_POWER: ({-1: 1.0}, (2, 0.0), None),
-	PENDANT_OF_MANA_SUPREMACY: ({-1: 0.9, }, (5, 0.0), None),
+	PENDANT_OF_MANA_SUPREMACY: ({-1: 0.9, }, (5, 0.0), (ITEM_FAMILY_MANA, 5, None)),
 
 	## Spell damage
 	# Common items
-	INSCRIBED_PEBBLE: ({-1: 0.25, 6: -0.15, 7: -0.25, 8: -0.25}, (2, 0.0), None),
+	INSCRIBED_PEBBLE: ({-1: 0.25, 6: -0.15, 7: -0.25, 8: -0.25}, (2, 0.0),[(ITEM_FAMILY_DMG_MAGIC, 1, None), (ITEM_FAMILY_SPELL_DAMAGE, 2, None)]),
 
 	# Uncommon items
-	MAGIC_FLOWER: ({-1: 0.15, 4: -0.05, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (2, 0.0), None),
-	CEREMONIAL_SKULL: ({-1: 0.25, 5: -0.05, 6: -0.15, 7: -0.225, 8: -0.225}, (2, 0.0), None),
-	SPARKLING_STAFF: ({-1: 0.15, 4: -0.05, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (2, 0.0), None),
-	DEMONIC_ORB: ({-1: 0.1, 5: -0.05, 6: -0.05, 7: -0.1, 8: -0.1}, (1, 0.0), None),
-	MAGICIAN_S_DOORKEY: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), None),
-	ARCANE_EYE: ({-1: 0.25, 5: -0.05, 6: -0.15, 7: -0.225, 8: -0.225}, (2, 0.0), None),
-	MOONSILVER_CIRCLET: ({-1: 0.4, 7: -0.15, 8: -0.25}, (2, 0.0), None),
+	MAGIC_FLOWER: ({-1: 0.15, 4: -0.05, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (2, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 1, None)),
+	CEREMONIAL_SKULL: ({-1: 0.25, 5: -0.05, 6: -0.15, 7: -0.225, 8: -0.225}, (2, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 2, None)),
+	SPARKLING_STAFF: ({-1: 0.15, 4: -0.05, 5: -0.1, 6: -0.15, 7: -0.15, 8: -0.15}, (2, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 1, None)),
+	DEMONIC_ORB: ({-1: 0.1, 5: -0.05, 6: -0.05, 7: -0.1, 8: -0.1}, (1, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 1, None)),
+	MAGICIAN_S_DOORKEY: ({-1: 0.1, 5: -0.05, 6: -0.1, 7: -0.1, 8: -0.1}, (1, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 1, None)),
+	ARCANE_EYE: ({-1: 0.25, 5: -0.05, 6: -0.15, 7: -0.225, 8: -0.225}, (2, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 2, None)),
+	MOONSILVER_CIRCLET: ({-1: 0.4, 7: -0.15, 8: -0.25}, (2, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 3, None)),
 
 	# Rare items
-	MAGIC_HAMMER: ({-1: 0.15, 6: -0.1, 7: -0.15, 8: -0.15}, (1, 0.0), None),
+	MAGIC_HAMMER: ({-1: 0.15, 6: -0.1, 7: -0.15, 8: -0.15}, (1, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 1, None)),
 	SECRET_TOME_OF_MAGIC: ({-1: 0.4}, (1, 0.0), None),
-	THUNDER_GLOVES: ({-1: 0.4, 6: -0.05, 7: -0.15, 8: -0.3}, (1, 0.0), None),
+	THUNDER_GLOVES: ({-1: 0.4, 6: -0.05, 7: -0.15, 8: -0.3}, (1, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 2, None)),
 
 	# Unique items
-	EVEN_MORE_MAGICAL_HAMMER: ({-1: 0.3, 6: -0.1, 7: -0.2, 8: -0.25}, (1, 0.0), None),
+	EVEN_MORE_MAGICAL_HAMMER: ({-1: 0.3, 6: -0.1, 7: -0.2, 8: -0.25}, (1, 0.0), (ITEM_FAMILY_SPELL_DAMAGE, 2, None)),
 
 	## Exp
 	# Common items
-	TRAINING_MANUAL: ({0: 0.1, 1: 0.05, 2: 0.05}, (2, 0.0), None),
+	TRAINING_MANUAL: ({0: 0.1, 1: 0.05, 2: 0.05}, (2, 0.0), (ITEM_FAMILY_EXP, 1, None)),
 
 	# Uncommon items
-	CLAWS_OF_WISDOM: ({-1: 0.3, 6: -0.15, 7: -0.3, 8: -0.3}, (2, 0.0), None),
-	EXPANDING_MIND: ({0: 0.15, 1: 0.1, 2: 0.1, 3: 0.05,}, (1, 0.0), None),
-	WISE_MAN_S_COOKING_RECIPE: ({0: 0.25, 1: 0.25, 2: 0.15, 3: 0.05,}, (1, 0.0), None),
-	CRYSTALLIZED_SCALES: ({0: 0.125, 1: 0.1, 2: 0.05,}, (2, 0.0), None),
+	CLAWS_OF_WISDOM: ({-1: 0.3, 6: -0.15, 7: -0.3, 8: -0.3}, (2, 0.0), (ITEM_FAMILY_EXP, 2, None)),
+	EXPANDING_MIND: ({0: 0.15, 1: 0.1, 2: 0.1, 3: 0.05,}, (1, 0.0), (ITEM_FAMILY_EXP, 1, None)),
+	WISE_MAN_S_COOKING_RECIPE: ({0: 0.25, 1: 0.25, 2: 0.15, 3: 0.05,}, (1, 0.0), (ITEM_FAMILY_EXP, 2, None)),
+	CRYSTALLIZED_SCALES: ({0: 0.125, 1: 0.1, 2: 0.05,}, (2, 0.0), (ITEM_FAMILY_EXP, 1, None)),
 
-	MAGIC_LINK: ({-1: 0.75, 6: -0.25, 7: -0.65, 8: -0.75}, (5, 0.0), None),
+	MAGIC_LINK: ({-1: 0.75, 6: -0.25, 7: -0.65, 8: -0.75}, (5, 0.0), (ITEM_FAMILY_EXP_GEN, 3, None)),
 
-	VETERAN_S_TOME_OF_BATTLE: ({-1: 0.3, 5: -0.05, 6: -0.175, 7: -0.3, 8: -0.3}, (2, 0.0), None),
-	KNOWING_MIND: ({-1: 0.65, 6: -0.15, 7: -0.4, 8: -0.65}, (2, 0.0), None),
+	VETERAN_S_TOME_OF_BATTLE: ({-1: 0.3, 5: -0.05, 6: -0.175, 7: -0.3, 8: -0.3}, (2, 0.0), (ITEM_FAMILY_EXP, 2, None)),
+	KNOWING_MIND: ({-1: 0.65, 6: -0.15, 7: -0.4, 8: -0.65}, (2, 0.0), (ITEM_FAMILY_EXP, 3, None)),
 
 	# Rare items
-	WRITER_S_KNOWLEDGE: ({-1: 0.3, 6: -0.1, 7: -0.3, 8: -0.3}, (2, 0.0), None),
+	WRITER_S_KNOWLEDGE: ({-1: 0.3, 6: -0.1, 7: -0.3, 8: -0.3}, (2, 0.0), (ITEM_FAMILY_EXP_GEN, 1, None)),
 	SHINING_ROCK: ({0: 0.2, 1: 0.2, 2: 0.125, 3: 0.075, 4: 0.05}, (2, 0.0), None),
-	SHARE_KNOWLEDGE: ({-1: 0.45, 6: -0.15, 7: -0.45, 8: -0.45}, (2, 0.0), None),
-	BASICS_OF_CALCULUS: ({-1: 0.45, 6: -0.15, 7: -0.45, 8: -0.45}, (2, 0.0), None),
-	BOOK_OF_KNOWLEDGE: ({-1: 0.35, 6: -0.1, 7: -0.35, 8: -0.35}, (2, 0.0), None),
-	MINDLEECHER: ({-1: 0.5, 6: -0.15, 7: -0.5, 8: -0.5}, (2, 0.0), None),
-	OLD_HUNTER: ({-1: 0.2, 6: -0.15, 7: -0.2, 8: -0.2}, (1, 0.0), None),
+	SHARE_KNOWLEDGE: ({-1: 0.45, 6: -0.15, 7: -0.45, 8: -0.45}, (2, 0.0), (ITEM_FAMILY_EXP_GEN, 1, None)),
+	BASICS_OF_CALCULUS: ({-1: 0.45, 6: -0.15, 7: -0.45, 8: -0.45}, (2, 0.0), (ITEM_FAMILY_EXP_GEN, 2, None)),
+	BOOK_OF_KNOWLEDGE: ({-1: 0.35, 6: -0.1, 7: -0.35, 8: -0.35}, (2, 0.0), (ITEM_FAMILY_EXP_GEN, 2, None)),
+	MINDLEECHER: ({-1: 0.5, 6: -0.15, 7: -0.5, 8: -0.5}, (2, 0.0), (ITEM_FAMILY_EXP_GEN, 2, None)),
+	OLD_HUNTER: ({-1: 0.2, 6: -0.15, 7: -0.2, 8: -0.2}, (1, 0.0), (ITEM_FAMILY_EXP_GEN, 1, None)),
 
 	# Unique items
-	PRIEST_FIGURINE: ({0: 0.2, 1: 0.2, 2: 0.05}, (2, 0.0), None),
-	FAITHFUL_STAFF: ({-1: 0.2, 6: -0.1, 7: -0.2, 8: -0.2}, (1, 0.0), None),
+	PRIEST_FIGURINE: ({0: 0.2, 1: 0.2, 2: 0.05}, (2, 0.0), (ITEM_FAMILY_EXP, 1, None)),
+	FAITHFUL_STAFF: ({-1: 0.2, 6: -0.1, 7: -0.2, 8: -0.2}, (1, 0.0), (ITEM_FAMILY_EXP_GEN, 1, None)),
 	LUNAR_ESSENCE: ({0: 0.45, 1: 0.45, 2: 0.375, 3: 0.3, 4: 0.2, 5: 0.125, 6: 0.05}, (2, 0.0), None),
-	JEWELS_OF_THE_MOON: ({-1: 0.9, 6: -0.25, 7: -0.55, 8: -0.75}, (3, 0.0), None),
+	JEWELS_OF_THE_MOON: ({-1: 0.9, 6: -0.25, 7: -0.55, 8: -0.75}, (3, 0.0), (ITEM_FAMILY_EXP_GEN, 3, None)),
 
 	## Gold
 
 	# Uncommon items
-	WANTED_LIST: ({0: 0.15, 1: 0.1, 2: 0.05}, (1, 0.0), None),
-	PILLAGE_TOOLS: ({0: 0.15, 1: 0.15, 2: 0.1, 3: 0.05}, (1, 0.0), None),
-	FLAWLESS_SAPPHIRE: ({0: 0.25, 1: 0.25, 2: 0.175, 3: 0.1, 4: 0.05,}, (2, 0.0), None),
-	DIAMOND_OF_GREED: ({0: 0.15, 1: 0.15, 2: 0.1, 3: 0.05,}, (1, 0.0), None),
-	BLOOD_CROWN: ({0: 0.25, 1: 0.25, 2: 0.175, 3: 0.1, 4: 0.05,}, (2, 0.0), None),
+	WANTED_LIST: ({0: 0.15, 1: 0.1, 2: 0.05}, (1, 0.0), (ITEM_FAMILY_GOLD, 1, None)),
+	PILLAGE_TOOLS: ({0: 0.15, 1: 0.15, 2: 0.1, 3: 0.05}, (1, 0.0), (ITEM_FAMILY_GOLD, 1, None)),
+	FLAWLESS_SAPPHIRE: ({0: 0.25, 1: 0.25, 2: 0.175, 3: 0.1, 4: 0.05,}, (2, 0.0), (ITEM_FAMILY_GOLD, 2, None)),
+	DIAMOND_OF_GREED: ({0: 0.15, 1: 0.15, 2: 0.1, 3: 0.05,}, (1, 0.0), (ITEM_FAMILY_GOLD, 1, None)),
+	BLOOD_CROWN: ({0: 0.25, 1: 0.25, 2: 0.175, 3: 0.1, 4: 0.05,}, (2, 0.0), (ITEM_FAMILY_GOLD, 2, None)),
 
-	SPEED_DEMON_S_REWARD: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.075}, (30, 0.0), None),
+	SPEED_DEMON_S_REWARD: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.075}, (5, 0.0), [(ITEM_FAMILY_GOLD, 2, None), (ITEM_FAMILY_EXP_GEN, 1, None)]),
 
 	# Rare items
-	ARMS_DEALER: ({0: 0.125, 1: 0.075}, (1, 0.0), None),
-	CURRENCY_CONVERTER: ({0: 0.15, 1: 0.1, 2: 0.05}, (2, 0.0), None),
+	ARMS_DEALER: ({0: 0.125, 1: 0.075}, (1, 0.0), (ITEM_FAMILY_GOLD, 2, None)),
+	CURRENCY_CONVERTER: ({0: 0.15, 1: 0.1, 2: 0.05}, (2, 0.0), (ITEM_FAMILY_GOLD, 2, None)),
 
-	ARCANE_SCRIPT: ({-1: 0.2, 6: -0.1, 7: -0.2, 8: -0.2}, (2, 0.0), None),
+	ARCANE_SCRIPT: ({-1: 0.2, 6: -0.1, 7: -0.2, 8: -0.2}, (4, 0.0), [(ITEM_FAMILY_GOLD, 2, None), (ITEM_FAMILY_EXP_GEN, 2, None)]),
 
 	# Unique items
-	GOLDEN_TRIDENT: ({0: 0.2, 1: 0.2, 2: 0.2, 3: 0.15, 4: 0.05}, (1, 0.0), None),
-	GOLDEN_DECORATION: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.2, 4: 0.1, 5: 0.05,}, (3, 0.0), None),
+	GOLDEN_TRIDENT: ({0: 0.2, 1: 0.2, 2: 0.2, 3: 0.15, 4: 0.05}, (1, 0.0), (ITEM_FAMILY_GOLD, 2, None)),
+	GOLDEN_DECORATION: ({0: 0.25, 1: 0.25, 2: 0.25, 3: 0.2, 4: 0.1, 5: 0.05,}, (3, 0.0), (ITEM_FAMILY_GOLD, 2, None)),
 
 
 	## Aura/enchant items
@@ -903,17 +1090,22 @@ USAGE_ITEM_VALUES: Dict[ITEM_ID, Tuple[GAME_PHASE_VALUE_DICT, Optional[Tuple[int
 
 def get_item_family_info(item_id: ITEM_ID) -> Optional[FAMILY_INFO]:
 	"""
-	Helper to safely retrieve family info for an item.
+	Helper to safely retrieve the first family info for legacy callers.
+	"""
+	infos = get_item_family_infos(item_id)
+	if not infos:
+		return None
+	return infos[0]
+
+
+def get_item_family_infos(item_id: ITEM_ID) -> List[FAMILY_INFO]:
+	"""
+	Return all family memberships for the given item.
 	"""
 	val = USAGE_ITEM_VALUES.get(item_id)
-	if not val:
-		return None
-	
-	# Handle potentially missing tuple element if structure wasn't fully migrated in all entries (unlikely with new type hint but safe)
-	if len(val) < 3:
-		return None
-	
-	return val[2]
+	if not val or len(val) < 3:
+		return []
+	return normalize_family_infos(val[2])
 
 
 __all__ = [
@@ -935,6 +1127,8 @@ __all__ = [
 	"HAUNTED_HAND",
 	"STRANGE_ITEM",
 	"get_item_family_info",
+	"get_item_family_infos",
 	"FAMILY_RULES",
 	"USAGE_ITEM_VALUES",
+	"normalize_family_infos",
 ]
