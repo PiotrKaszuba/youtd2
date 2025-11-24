@@ -34,7 +34,7 @@ from scripts.horadric_cube.models import Rarity
 from scripts.horadric_cube.simulate_strange_item import strange_item_usage_from_T_table
 
 PORT = 8003
-CONTINUE_OPT = True
+CONTINUE_OPT = False
 
 # Global engine and values, initialized on startup
 engine: Optional[HoradricEngine] = None
@@ -46,7 +46,7 @@ ITEM_VALUES_FILE = "item_values.pkl"
 STRANGE_ITEM_LEVEL_STOP = 300
 STRANGE_ITEM_STOP_AT = 24
 STRANGE_ITEM_DISCOUNT = 0.99
-CHECKPOINT_BASE_FILE = ITEM_VALUES_FILE
+CHECKPOINT_BASE_FILE = "item_values_cont.pkl"
 CHECKPOINT_EVERY_INITIAL: Optional[int] = 1
 CHECKPOINT_EVERY_CONTINUE: Optional[int] = 1
 
@@ -97,21 +97,21 @@ def initialize_engine():
 		recipes_included={RECIPE_REASSEMBLE, RECIPE_PERFECT},
 		excluded_recipe_rarities={(RECIPE_PERFECT, Rarity.UNIQUE), },
 		
-		random_seed=42,
+		random_seed=43,
 
 		ingredient_rarity_whitelist={Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.UNIQUE},
 		phases_included={i for i in range(len(GAME_PHASES))},
 		greedy_sets_per_recipe={-1: 1000},
-		random_sets_per_recipe={-1: 250_000, RECIPE_PERFECT: 750_000},
-		num_iterations=2,
+		random_sets_per_recipe={-1: 350_000, RECIPE_PERFECT: 1_150_000},
+		num_iterations=10,
 		learning_rate=0.33,
 		strategies=["custom",],
 		output_strategy="custom",
 		percentile_target=98.5,
 		custom_strategy_weights={
-			"max": 0,
+			"max": 0.125,
 			"avg": 0.175,
-			"pct": 0.825,
+			"pct": 0.7,
 		},
 	)
 
