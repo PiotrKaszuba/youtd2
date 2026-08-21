@@ -1,6 +1,7 @@
 import http.server
 import os
 import pickle
+import random
 import socketserver
 import json
 import sys
@@ -42,11 +43,12 @@ item_values: Optional[Dict[int, Any]] = None
 config: Optional[OptimizerConfig] = None
 
 # item values file name
-ITEM_VALUES_FILE = "item_values.pkl"
+RESOURCE_DIR = Path(__file__).resolve().parent
+ITEM_VALUES_FILE = RESOURCE_DIR / "item_values.pkl"
 STRANGE_ITEM_LEVEL_STOP = 300
 STRANGE_ITEM_STOP_AT = 24
 STRANGE_ITEM_DISCOUNT = 0.99
-CHECKPOINT_BASE_FILE = "item_values_cont.pkl"
+CHECKPOINT_BASE_FILE = RESOURCE_DIR / "item_values_cont.pkl"
 CHECKPOINT_EVERY_INITIAL: Optional[int] = 1
 CHECKPOINT_EVERY_CONTINUE: Optional[int] = 1
 
@@ -297,6 +299,9 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 			phase=phase_idx,
 			state_inventory=inventory_for_caps,
 		)
+		# Keep request suggestions reproducible. Candidate generation otherwise
+		# falls back to the process-global RNG and ignores config.random_seed.
+		request_rng = random.Random(config.random_seed)
 
 		for recipe in engine.recipe_db.recipes.values():
 			recipe_id = recipe.id
@@ -312,6 +317,7 @@ class OptimizationHandler(http.server.BaseHTTPRequestHandler):
 				item_values=item_values,
 				state_inventory=inventory_for_actions,
 				value_func=value_func,
+				rng=request_rng,
 			)
 
 			for S in candidate_sets:
@@ -444,7 +450,7 @@ if __name__ == '__main__':
 		
 		# If launched with --debug-client, spin up a background mock client
 		# that sends a single request once the server is listening.
-		if '--debug-client' in sys.argv or True:
+		if '--debug-client' in sys.argv:
 			def _run_mock_client():
 				# Small delay to ensure the server socket is ready
 				time.sleep(1.0)
