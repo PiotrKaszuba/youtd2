@@ -199,20 +199,15 @@ func _generate_items_checksum() -> Dictionary:
 
 	var item_checksums: Dictionary = {}
 
-	# Get items from all players
-	var player_list: Array = PlayerManager.get_player_list()
-	for player in player_list:
-		var item_stash: ItemContainer = player.get_item_stash()
-		var horadric_stash: ItemContainer = player.get_horadric_stash()
-
-		var items: Array = item_stash.get_item_list() + horadric_stash.get_item_list()
-		for item in items:
-			var item_data: Dictionary = _get_item_data(item)
-			item_checksums["item_%d" % item.get_uid()] = {
-				"type": "item",
-				"checksum": _calculate_node_checksum(item_data),
-				"data": item_data,
-			}
+	var item_list: Array = get_tree().get_nodes_in_group("items")
+	item_list.sort_custom(func(a: Item, b: Item): return a.get_uid() < b.get_uid())
+	for item in item_list:
+		var item_data: Dictionary = _get_item_data(item)
+		item_checksums["item_%d" % item.get_uid()] = {
+			"type": "item",
+			"checksum": _calculate_node_checksum(item_data),
+			"data": item_data,
+		}
 
 	var combined_checksum: String = _calculate_combined_checksum(item_checksums)
 
@@ -332,6 +327,7 @@ func _get_item_data(item: Item) -> Dictionary:
 		"id": item.get_id(),
 		"rarity": item.get_rarity(),
 		"carrier_uid": item.get_carrier().get_uid() if item.get_carrier() else 0,
+		"horadric_lock_enabled": item.get_horadric_lock_is_enabled(),
 	}
 
 

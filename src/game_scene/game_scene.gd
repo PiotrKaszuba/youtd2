@@ -93,6 +93,7 @@ func _ready():
 	EventBus.player_shift_right_clicked_item.connect(_on_player_shift_right_clicked_item)
 	EventBus.player_clicked_tower_buff_group.connect(_on_player_clicked_tower_buff_group)
 	EventBus.player_requested_to_sort_item_stash.connect(_on_player_requested_to_sort_item_stash)
+	EventBus.player_requested_to_set_horadric_lock.connect(_on_player_requested_to_set_horadric_lock)
 	
 	_select_unit.selected_unit_changed.connect(_on_selected_unit_changed)
 
@@ -908,6 +909,15 @@ func _on_player_clicked_tower_buff_group(tower: Tower, buff_group: int):
 
 func _on_player_requested_to_sort_item_stash():
 	var action: Action = ActionSortItemStash.make()
+	_game_client.add_action(action)
+
+
+func _on_player_requested_to_set_horadric_lock(item: Item, enabled: bool):
+	var local_player: Player = PlayerManager.get_local_player()
+	if !ActionSetHoradricLock.verify(local_player, item):
+		return
+
+	var action: Action = ActionSetHoradricLock.make(item.get_uid(), enabled)
 	_game_client.add_action(action)
 
 
