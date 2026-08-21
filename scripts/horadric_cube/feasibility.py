@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Set
 
 from .constants import Inventory
 from .db import ItemDatabase
@@ -55,7 +55,9 @@ def _build_permanent_candidates(
 			continue
 		if item.rarity != ingredient_rarity:
 			continue
-		if item.id in explicit_set:
+		# With a concrete inventory, explicit ingredients were already
+		# consumed from the working copy. Keep any remaining copies eligible.
+		if inventory is None and item.id in explicit_set:
 			continue
 		if inventory is not None and inventory.get(item.id, 0) <= 0:
 			continue
@@ -81,24 +83,27 @@ def _build_level_to_ids(
 	return level_to_ids
 
 
-def _assign_levels_to_items(
-	levels: List[int],
+def _has_bounded_level_sum(
 	level_to_ids: Dict[int, List[int]],
-) -> Optional[List[int]]:
-	"""
-	Try to map a multiset of levels to concrete item IDs under inventory bounds.
-	"""
-	local_map: Dict[int, List[int]] = {lvl: ids.copy() for lvl, ids in level_to_ids.items()}
-	assigned: List[int] = []
+	item_count: int,
+	target_sum: int,
+) -> bool:
+	"""Return whether available item counts can reach ``target_sum`` exactly."""
+	if item_count < 0 or target_sum < 0:
+		return False
 
-	for lvl in levels:
-		bucket = local_map.get(lvl)
-		if not bucket:
-			return None
-		item_id = bucket.pop()
-		assigned.append(item_id)
+	reachable_sums: List[Set[int]] = [set() for _ in range(item_count + 1)]
+	reachable_sums[0].add(0)
 
-	return assigned
+	for level, item_ids in level_to_ids.items():
+		for _item_id in item_ids:
+			for used_count in range(item_count - 1, -1, -1):
+				for current_sum in reachable_sums[used_count].copy():
+					new_sum = current_sum + level
+					if new_sum <= target_sum:
+						reachable_sums[used_count + 1].add(new_sum)
+
+	return target_sum in reachable_sums[item_count]
 
 
 def is_avg_level_feasible(
@@ -174,25 +179,18 @@ def is_avg_level_feasible(
 		inventory=working_inventory if inventory is not None else None,
 	)
 
-	level_values: List[int] = [item.required_wave_level for item in candidates]
-
 	# Search over possible missing sums within the structural bounds.
 	for target_sum in range(sum_rest_min, sum_rest_max + 1):
-		k_solution = find_k_sum_with_reuse(
-			nums=level_values,
-			k=missing_count,
-			target_sum=target_sum,
-		)
-		if k_solution is None:
-			continue
-
-		# If inventory is None, any structural solution is acceptable.
 		if inventory is None:
-			return True
-
-		# Map level multiset to concrete items under counts.
-		assigned_ids = _assign_levels_to_items(k_solution, level_to_ids)
-		if assigned_ids is None:
+			level_values: List[int] = [item.required_wave_level for item in candidates]
+			k_solution = find_k_sum_with_reuse(
+				nums=level_values,
+				k=missing_count,
+				target_sum=target_sum,
+			)
+			if k_solution is None:
+				continue
+		elif not _has_bounded_level_sum(level_to_ids, missing_count, target_sum):
 			continue
 
 		# Permanents are feasible; check usables with the same inventory bounds.

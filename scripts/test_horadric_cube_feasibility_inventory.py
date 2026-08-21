@@ -58,6 +58,40 @@ def _build_synthetic_db() -> ItemDatabase:
 			name="Perm L5",
 			description="",
 		),
+		4: Item(
+			id=4,
+			name_english="Perm L0",
+			item_type=ItemType.REGULAR,
+			author="test",
+			rarity=Rarity.RARE,
+			cost=0,
+			required_wave_level=0,
+			specials="",
+			ability_list="",
+			aura_list="",
+			autocast_list="",
+			script_path="",
+			icon="",
+			name="Perm L0",
+			description="",
+		),
+		5: Item(
+			id=5,
+			name_english="Perm L1",
+			item_type=ItemType.REGULAR,
+			author="test",
+			rarity=Rarity.RARE,
+			cost=0,
+			required_wave_level=1,
+			specials="",
+			ability_list="",
+			aura_list="",
+			autocast_list="",
+			script_path="",
+			icon="",
+			name="Perm L1",
+			description="",
+		),
 		99: Item(
 			id=99,
 			name_english="Target",
@@ -129,6 +163,24 @@ def test_is_avg_level_feasible_negative_insufficient_levels():
 		item_db=item_db,
 		inventory=inventory,
 		avg_permanent_level=avg_level,
+		explicit_ingredient_ids=[],
+	)
+
+
+def test_is_avg_level_feasible_uses_available_item_counts():
+	item_db = _build_synthetic_db()
+	recipe = _build_recipe()
+
+	# A valid level-2 sum is 0 + 1 + 1. The old reuse-only solver instead
+	# chose 0 + 0 + 2, which cannot be assigned with this inventory.
+	inventory = {4: 1, 5: 2, 1: 1}
+
+	assert is_avg_level_feasible(
+		target_item_id=99,
+		recipe=recipe,
+		item_db=item_db,
+		inventory=inventory,
+		avg_permanent_level=0,
 		explicit_ingredient_ids=[],
 	)
 
