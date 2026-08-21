@@ -42,8 +42,6 @@ func _ready():
 	PlayerManager.reset()
 	GroupManager.reset()
 	
-	_replay_manager.start_recording()
-	
 #	Replace small map with big map if playing in multiplayer
 #	NOTE: need to swap instead of using big map for both
 #	cases because big map makes the framerate worse,
@@ -73,6 +71,7 @@ func _ready():
 	EventBus.player_requested_help.connect(_on_player_requested_help)
 	EventBus.player_requested_quit_to_title.connect(_on_player_requested_quit_to_title)
 	_game_menu.save_replay_pressed.connect(_on_game_menu_save_replay)
+	_game_menu.take_control_pressed.connect(_on_game_menu_take_control_pressed)
 	EventBus.player_selected_builder.connect(_on_player_selected_builder)
 
 	if _replay_manager:
@@ -113,6 +112,7 @@ func _ready():
 
 #	NOTE: ensure object UID counters are statically reset between sessions
 	UidMaxTracker.reset()
+	_replay_manager.prepare_game_scene()
 
 	_setup_players()
 	PlayerManager.send_players_created_signal()
@@ -178,6 +178,9 @@ func _ready():
 
 	if Config.run_test_item_drop_chances():
 		TestItemDropChances.run()
+
+	_sync_replay_ui_state()
+	_replay_manager.finish_zero_duration_playback()
 
 
 func _unhandled_input(event: InputEvent):
@@ -471,7 +474,7 @@ func _submit_chat_message():
 	
 	var player: Player = PlayerManager.get_local_player()
 	var unit: Unit = player.get_selected_unit()
-	var selected_unit_uid: int = unit.get_uid()
+	var selected_unit_uid: int = unit.get_uid() if unit != null else -1
 
 	var chat_action: Action = ActionChat.make(chat_message, selected_unit_uid)
 	_game_client.add_action(chat_action)
@@ -514,12 +517,22 @@ func _do_focus_target():
 
 
 func _toggle_game_menu():
-	_game_menu.visible = !_game_menu.visible
+	var menu_will_open: bool = !_game_menu.visible
+	_set_game_menu_open(menu_will_open)
+
+	if _replay_manager.current_mode == ReplayManager.ReplayMode.PLAYBACK:
+		if menu_will_open:
+			_replay_manager.pause_playback()
+		else:
+			_replay_manager.resume_playback()
+
+
+func _set_game_menu_open(value: bool):
+	_game_menu.visible = value
 
 	var player_mode: PlayerMode.enm = Globals.get_player_mode()
 	if player_mode == PlayerMode.enm.SINGLEPLAYER:
-		var toggled_paused_value: bool = !get_tree().paused
-		_set_game_paused(toggled_paused_value)
+		_set_game_paused(value)
 
 
 func _set_game_paused(value: bool):
@@ -589,7 +602,11 @@ func _cleanup_all_objects():
 #########################
 
 func _on_game_menu_continue_pressed():
-	_toggle_game_menu()
+	# Close and unpause before resuming. Playback state signals are synchronous,
+	# so their UI callback must only reflect state, not toggle it again.
+	_set_game_menu_open(false)
+	if _replay_manager.current_mode == ReplayManager.ReplayMode.PLAYBACK:
+		_replay_manager.resume_playback()
 
 
 func _on_settings_changed():
@@ -798,12 +815,19 @@ func _on_player_selected_builder():
 	_builder_menu.hide()
 	_builder_menu.queue_free()
 	_builder_menu = null
-	
-	_set_ui_input_enabled(true)
-	
+
+	var replay_is_running: bool = _replay_manager.should_suppress_live_actions()
+	_set_ui_input_enabled(!replay_is_running)
+
 	var wisdom_upgrades: Dictionary = Settings.get_wisdom_upgrades()
 	var action: Action = ActionSelectWisdomUpgrades.make(wisdom_upgrades)
-	_game_client.add_action(action)
+	if replay_is_running:
+		var local_player_for_action: Player = PlayerManager.get_local_player()
+		var serialized_action: Dictionary = action.serialize()
+		serialized_action[Action.Field.PLAYER_ID] = local_player_for_action.get_id()
+		_game_client.execute_replay_action(serialized_action)
+	else:
+		_game_client.add_action(action)
 
 	var wave_count: int = Globals.get_wave_count()
 	var difficulty: Difficulty.enm = Globals.get_difficulty()
@@ -896,9 +920,21 @@ func _on_game_menu_quit_pressed():
 
 func _on_game_menu_save_replay():
 	if _replay_manager:
-		var replay_path: String = _replay_manager.save_replay_from_current_game()
+		var replay_path: String = _replay_manager.stop_recording()
 		if !replay_path.is_empty():
 			Messages.add_normal(PlayerManager.get_local_player(), "Replay saved to: " + replay_path)
+		else:
+			Messages.add_error(PlayerManager.get_local_player(), "Replay could not be saved.")
+
+
+func _on_game_menu_take_control_pressed():
+	if !_replay_manager.branch_recording_from_playback():
+		Messages.add_error(PlayerManager.get_local_player(), "Replay control could not be transferred.")
+		return
+
+	_set_ui_input_enabled(true)
+	if _game_menu.visible:
+		_toggle_game_menu()
 
 
 func _on_replay_mode_changed(mode: ReplayManager.ReplayMode):
@@ -910,13 +946,13 @@ func _on_replay_playback_state_changed(state: ReplayManager.PlaybackState):
 
 
 func _update_ui_for_replay_mode(mode: ReplayManager.ReplayMode):
+	_game_menu.update_replay_controls(mode, _replay_manager.playback_state)
+
 	# Update UI elements based on replay mode
 	match mode:
 		ReplayManager.ReplayMode.NONE:
-			# Normal gameplay mode
-			_set_ui_input_enabled(true)
+			pass
 		ReplayManager.ReplayMode.RECORDING:
-			# Recording mode - disable certain UI elements
 			pass
 		ReplayManager.ReplayMode.PLAYBACK:
 			# Playback mode - lock player actions
@@ -924,20 +960,25 @@ func _update_ui_for_replay_mode(mode: ReplayManager.ReplayMode):
 
 
 func _update_ui_for_playback_state(state: ReplayManager.PlaybackState):
+	_game_menu.update_replay_controls(_replay_manager.current_mode, state)
+
 	match state:
 		ReplayManager.PlaybackState.PLAYING:
-			# Hide pause menu when playing
-			if _game_menu.visible:
-				_toggle_game_menu()
+			# State callbacks reflect the state directly and never emit another
+			# playback transition, avoiding synchronous signal reentrancy.
+			_set_game_menu_open(false)
 		ReplayManager.PlaybackState.PAUSED:
-			# Show pause menu when paused
-			if not _game_menu.visible:
-				_toggle_game_menu()
+			_set_game_menu_open(true)
 		ReplayManager.PlaybackState.FINISHED:
-			# Show pause menu when finished and allow continuing
-			if not _game_menu.visible:
-				_toggle_game_menu()
-			_set_ui_input_enabled(true)
+			# Keep gameplay input locked until the player explicitly takes control.
+			_set_game_menu_open(true)
+			_set_ui_input_enabled(false)
+
+
+func _sync_replay_ui_state():
+	_update_ui_for_replay_mode(_replay_manager.current_mode)
+	if _replay_manager.current_mode == ReplayManager.ReplayMode.PLAYBACK:
+		_update_ui_for_playback_state(_replay_manager.playback_state)
 
 
 func _on_player_requested_quit_to_title():

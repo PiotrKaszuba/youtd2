@@ -102,7 +102,8 @@ func _on_settings_button_pressed():
 
 
 func _on_load_replay_button_pressed():
-	_tab_container.current_tab = Tab.CONFIGURE_SINGLEPLAYER  # Reuse for now, will modify for replay loading
+	_configure_singleplayer_menu.show_replay_selection()
+	_tab_container.current_tab = Tab.CONFIGURE_SINGLEPLAYER
 
 
 func _on_credits_button_pressed():
@@ -124,8 +125,11 @@ func _on_configure_singleplayer_menu_start_button_pressed():
 	Settings.flush()
 
 	var peer_id_list: Array = [multiplayer.get_unique_id()]
+	var player_name_map: Dictionary = {
+		multiplayer.get_unique_id(): Settings.get_setting(Settings.PLAYER_NAME),
+	}
 
-	start_game(PlayerMode.enm.SINGLEPLAYER, game_length, game_mode, difficulty, team_mode, origin_seed, Globals.ConnectionType.ENET, peer_id_list, {})
+	start_game(PlayerMode.enm.SINGLEPLAYER, game_length, game_mode, difficulty, team_mode, origin_seed, Globals.ConnectionType.ENET, peer_id_list, player_name_map)
 
 
 func _on_configure_singleplayer_menu_load_replay_pressed(replay_id: String):
@@ -135,7 +139,18 @@ func _on_configure_singleplayer_menu_load_replay_pressed(replay_id: String):
 	if replay_manager:
 		# start playback already restores appropriate Globals (used below)
 		if replay_manager.start_playback(replay_id):
-			start_game(PlayerMode.enm.SINGLEPLAYER, Globals._wave_count, Globals._game_mode, Globals._difficulty, Globals._team_mode, Globals._origin_seed, Globals.ConnectionType.ENET)
+			var peer_id_list: Array = Globals.get_game_peer_id_list().duplicate()
+			var player_name_map: Dictionary = Globals._enet_peer_id_to_player_name.duplicate(true)
+
+			# Legacy replay metadata did not store the authoritative roster.
+			# Preserve recorded values whenever present and only fill empty data.
+			if peer_id_list.is_empty():
+				peer_id_list = [multiplayer.get_unique_id()]
+			if player_name_map.is_empty():
+				for peer_id in peer_id_list:
+					player_name_map[peer_id] = Settings.get_setting(Settings.PLAYER_NAME)
+
+			start_game(PlayerMode.enm.SINGLEPLAYER, Globals._wave_count, Globals._game_mode, Globals._difficulty, Globals._team_mode, Globals._origin_seed, Globals.ConnectionType.ENET, peer_id_list, player_name_map)
 
 
 func _on_generic_tab_cancel_pressed():

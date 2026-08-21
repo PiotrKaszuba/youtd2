@@ -21,7 +21,6 @@ signal playback_state_changed(state: PlaybackState)
 signal replay_loaded(replay_file_path: String)
 signal replay_saved(replay_file_path: String)
 signal state_verification_failed(error_details: Dictionary)
-signal continue_pressed()
 
 var current_mode: ReplayMode = ReplayMode.NONE
 var playback_state: PlaybackState = PlaybackState.STOPPED
@@ -38,11 +37,18 @@ var _initial_game_state: Dictionary = {}
 # Playback state
 var _playback_actions: Array = []
 var _playback_tick: int = 0
+var _playback_duration_ticks: int = 0
+
+# Branch metadata. These fields are additive and old replay files remain valid.
+var _parent_replay_id: String = ""
+var _branch_tick: int = -1
+var _settings_before_playback: Dictionary = {}
 
 # State verification
 var _state_verifier: StateVerifier
 var _checksum_period: int = 300
 var _detailed_checksums_enabled: bool = true
+var _verification_start_tick: int = 0
 
 # File paths
 const REPLAY_DIR: String = "user://replays/"
@@ -75,11 +81,16 @@ func tick():
 func start_recording() -> bool:
 	if current_mode != ReplayMode.NONE:
 		return false
-	
-	_restore_original_state()
 
 	current_mode = ReplayMode.RECORDING
+	playback_state = PlaybackState.STOPPED
+	_recorded_actions.clear()
+	_recording_start_tick = _get_current_tick()
+	_last_checksum_tick = _recording_start_tick
+	_verification_start_tick = _recording_start_tick
 	_initial_game_state = _get_initial_game_state()
+	_parent_replay_id = ""
+	_branch_tick = -1
 
 	# Generate unique replay ID
 	current_replay_file = _generate_replay_id()
@@ -88,29 +99,34 @@ func start_recording() -> bool:
 	return true
 
 
-# func stop_recording() -> bool:
-# 	if current_mode != ReplayMode.RECORDING:
-# 		return false
+func stop_recording() -> String:
+	if current_mode != ReplayMode.RECORDING:
+		return ""
 
-# 	current_mode = ReplayMode.NONE
+	var replay_id: String = _save_replay()
+	if replay_id.is_empty():
+		return ""
 
-# 	# Save replay
-# 	var binary_file_path: String = _save_replay()
-
-# 	replay_mode_changed.emit(current_mode)
-# 	return true
+	current_mode = ReplayMode.NONE
+	replay_mode_changed.emit(current_mode)
+	return replay_id
 
 
 func start_playback(replay_id: String) -> bool:
 	if current_mode != ReplayMode.NONE:
 		return false
 	
-	_restore_original_state()
+	_clear_session_state()
 	
 	current_replay_file = replay_id
 	var replay_data: Dictionary = _load_replay_file(replay_id)
 	if replay_data.is_empty():
 		return false
+
+	_settings_before_playback = {
+		"exp_password": Settings.get_setting(Settings.EXP_PASSWORD),
+		"wisdom_upgrades": Settings.get_wisdom_upgrades().duplicate(true),
+	}
 	
 	# Store original player data for restoration
 	if _should_backup_data(replay_data):
@@ -118,6 +134,20 @@ func start_playback(replay_id: String) -> bool:
 
 	# Load replay state
 	_playback_actions = replay_data.get("actions", [])
+	_playback_duration_ticks = replay_data.get("duration_ticks", 0)
+	if _playback_duration_ticks <= 0 && !_playback_actions.is_empty():
+		_playback_duration_ticks = _playback_actions.back().get("tick", 0) + 1
+	_initial_game_state = replay_data.get("initial_state", {}).duplicate(true)
+	_parent_replay_id = replay_data.get("parent_replay_id", "")
+	_branch_tick = replay_data.get("branch_tick", -1)
+	_checksum_period = replay_data.get("checksum_period", 300)
+	_detailed_checksums_enabled = replay_data.get("detailed_checksums", true)
+	_state_verifier.set_detailed_checksums_enabled(_detailed_checksums_enabled)
+	_verification_start_tick = replay_data.get(
+		"verification_start_tick",
+		replay_data.get("recording_start_tick", 0),
+	)
+	_last_checksum_tick = _verification_start_tick
 
 	current_mode = ReplayMode.PLAYBACK
 	playback_state = PlaybackState.PLAYING
@@ -132,38 +162,67 @@ func start_playback(replay_id: String) -> bool:
 	return true
 
 
-# func stop_playback() -> bool:
-# 	if current_mode != ReplayMode.PLAYBACK:
-# 		return false
-
-# 	current_mode = ReplayMode.NONE
-# 	playback_state = PlaybackState.STOPPED
-
-# 	# Restore original game state
-# 	_restore_original_state()
-
-# 	replay_mode_changed.emit(current_mode)
-# 	playback_state_changed.emit(playback_state)
-
-# 	return true
+# Called after GameScene resets UidMaxTracker and before it creates players or
+# other initial game objects. Playback state was loaded on the title screen.
+func prepare_game_scene():
+	if current_mode == ReplayMode.PLAYBACK:
+		_restore_static_var_states(_initial_game_state.get("static_var_states", {}))
+	elif current_mode == ReplayMode.NONE && Globals.get_player_mode() == PlayerMode.enm.SINGLEPLAYER:
+		start_recording()
 
 
-# func pause_playback() -> bool:
-# 	if playback_state != PlaybackState.PLAYING:
-# 		return false
+func branch_recording_from_playback() -> bool:
+	var can_branch: bool = current_mode == ReplayMode.PLAYBACK && playback_state in [
+		PlaybackState.PLAYING,
+		PlaybackState.PAUSED,
+		PlaybackState.FINISHED,
+	]
+	if !can_branch:
+		return false
 
-# 	playback_state = PlaybackState.PAUSED
-# 	playback_state_changed.emit(playback_state)
-# 	return true
+	var source_replay_id: String = current_replay_file
+	_recorded_actions.clear()
+	for index in range(_playback_tick):
+		_recorded_actions.append(_playback_actions[index].duplicate(true))
+	_recording_start_tick = 0
+	_branch_tick = _get_current_tick()
+	_verification_start_tick = _branch_tick
+	_last_checksum_tick = _branch_tick
+	_parent_replay_id = source_replay_id
+	current_replay_file = _generate_replay_id()
+
+	_playback_actions.clear()
+	_playback_tick = 0
+	_playback_duration_ticks = 0
+	current_mode = ReplayMode.RECORDING
+	playback_state = PlaybackState.STOPPED
+
+	playback_state_changed.emit(playback_state)
+	replay_mode_changed.emit(current_mode)
+	return true
 
 
-# func resume_playback() -> bool:
-# 	if playback_state != PlaybackState.PAUSED:
-# 		return false
+func pause_playback() -> bool:
+	if current_mode != ReplayMode.PLAYBACK || playback_state != PlaybackState.PLAYING:
+		return false
 
-# 	playback_state = PlaybackState.PLAYING
-# 	playback_state_changed.emit(playback_state)
-# 	return true
+	playback_state = PlaybackState.PAUSED
+	playback_state_changed.emit(playback_state)
+	return true
+
+
+func resume_playback() -> bool:
+	if current_mode != ReplayMode.PLAYBACK || playback_state != PlaybackState.PAUSED:
+		return false
+
+	playback_state = PlaybackState.PLAYING
+	playback_state_changed.emit(playback_state)
+	return true
+
+
+func finish_zero_duration_playback():
+	if current_mode == ReplayMode.PLAYBACK && playback_state == PlaybackState.PLAYING && _playback_duration_ticks == 0:
+		_finish_playback()
 
 
 func is_recording() -> bool:
@@ -172,6 +231,10 @@ func is_recording() -> bool:
 
 func is_playing() -> bool:
 	return current_mode == ReplayMode.PLAYBACK && playback_state == PlaybackState.PLAYING
+
+
+func should_suppress_live_actions() -> bool:
+	return current_mode == ReplayMode.PLAYBACK
 
 
 func get_replay_list() -> Array:
@@ -245,21 +308,6 @@ func _get_game_client() -> GameClient:
 	return _game_client
 
 
-func _get_select_unit() -> SelectUnit:
-	return _get_game_client()._select_unit
-
-
-func _get_build_space() -> BuildSpace:
-	return _get_game_client()._build_space
-
-
-func _get_chat_commands() -> ChatCommands:
-	return _get_game_client()._chat_commands
-
-
-func _get_hud() -> HUD:
-	return _get_game_client()._hud
-
 func _create_directories():
 	var dirs: Array = [REPLAY_DIR, STATE_DIR, BACKUP_DIR]
 	for dir_path in dirs:
@@ -306,16 +354,16 @@ func _update_playback():
 	var should_generate: bool = _should_generate_checksum()
 	var is_checksum_available: bool = is_tick_checksum_available(current_tick)
 	if should_generate:
-		if is_checksum_available:
-			var verification_result: Dictionary = verify_replay_state_at_tick(current_tick)
-			
-			#if not verification_result.get("valid", true):
-				## Pause playback if state verification fails
-				#playback_state = PlaybackState.PAUSED
-				#playback_state_changed.emit(playback_state)
+		_last_checksum_tick = _get_current_tick()
+		# A derived replay has no valid checksum files for its inherited prefix.
+		# Resume verification only at the recorded derived-state boundary.
+		if current_tick >= _verification_start_tick && is_checksum_available:
+			verify_replay_state_at_tick(current_tick)
 
-	# Check if playback is finished
-	if _playback_tick >= _playback_actions.size():
+	# The final recorded tick must update the world before the SceneTree is paused
+	# by the FINISHED callback, so complete when this tick reaches the duration.
+	var duration_reached: bool = current_tick + 1 >= _playback_duration_ticks
+	if duration_reached && _playback_tick >= _playback_actions.size():
 		_finish_playback()
 
 
@@ -351,9 +399,6 @@ func _record_game_state_checksum(tick: int):
 
 
 func _save_replay() -> String:
-	if _recorded_actions.is_empty():
-		return ""
-
 	# Generate filename if not already set
 	if current_replay_file.is_empty():
 		current_replay_file = _generate_replay_id()
@@ -371,8 +416,8 @@ func _save_replay() -> String:
 
 		file.close()
 
-		# Save metadata file as well
-		_save_replay_metadata()
+		if !_save_replay_metadata():
+			return ""
 
 		replay_saved.emit(current_replay_file)
 		return current_replay_file
@@ -381,196 +426,69 @@ func _save_replay() -> String:
 
 
 func _execute_replay_action(action_data: Dictionary):
-	# Remove tick from action data before execution
 	var action_copy: Dictionary = action_data.duplicate()
 	action_copy.erase("tick")
-	
-	var action := {}
-	for k in action_copy.keys():
-		action[int(k)] = action_copy[k]
-	
-	# Execute the action (same as normal execution but with recorded data)
-	var action_type: Action.Type = action[Action.Field.TYPE]
-	if not Action.is_replayable_type(action_type):
-		return
-		
-	var player_id: int = action[Action.Field.PLAYER_ID]
-	var player: Player = PlayerManager.get_player(player_id)
 
-	if player == null:
+	# JSON-based legacy tools can stringify integer keys. Binary replay files keep
+	# them as integers, but normalizing here preserves compatibility with both.
+	var action: Dictionary = {}
+	for key in action_copy.keys():
+		action[int(key)] = action_copy[key]
+
+	var action_type: Action.Type = action.get(Action.Field.TYPE, Action.Type.NONE)
+	if !Action.is_replayable_type(action_type):
 		return
 
-	# Execute based on action type using the same logic as GameClient
-	match action_type:
-		Action.Type.IDLE: return
-		Action.Type.CHAT: _execute_chat_action(action, player)
-		Action.Type.BUILD_TOWER: _execute_build_tower_action(action, player)
-		Action.Type.UPGRADE_TOWER: _execute_upgrade_tower_action(action, player)
-		Action.Type.TRANSFORM_TOWER: _execute_transform_tower_action(action, player)
-		Action.Type.SELL_TOWER: _execute_sell_tower_action(action, player)
-		Action.Type.SELECT_BUILDER: _execute_select_builder_action(action, player)
-		Action.Type.SELECT_WISDOM_UPGRADES: _execute_select_wisdom_upgrades_action(action, player)
-		Action.Type.TOGGLE_AUTOCAST: _execute_toggle_autocast_action(action, player)
-		Action.Type.CONSUME_ITEM: _execute_consume_item_action(action, player)
-		Action.Type.DROP_ITEM: _execute_drop_item_action(action, player)
-		Action.Type.MOVE_ITEM: _execute_move_item_action(action, player)
-		Action.Type.SWAP_ITEMS: _execute_swap_items_action(action, player)
-		Action.Type.AUTOFILL: _execute_autofill_action(action, player)
-		Action.Type.TRANSMUTE: _execute_transmute_action(action, player)
-		Action.Type.RESEARCH_ELEMENT: _execute_research_element_action(action, player)
-		Action.Type.ROLL_TOWERS: _execute_roll_towers_action(action, player)
-		Action.Type.START_NEXT_WAVE: _execute_start_next_wave_action(action, player)
-		Action.Type.AUTOCAST: _execute_autocast_action(action, player)
-		Action.Type.FOCUS_TARGET: _execute_focus_target_action(action, player)
-		Action.Type.CHANGE_BUFFGROUP: _execute_change_buffgroup_action(action, player)
-		Action.Type.SELECT_UNIT: _execute_select_unit_action(action, player)
-		Action.Type.SORT_ITEM_STASH: _execute_sort_item_stash_action(action, player)
-
-
-func _execute_chat_action(action: Dictionary, player: Player):
-	var chat_commands: ChatCommands = _get_chat_commands()
-	var hud: HUD = _get_hud()
-	
-	# code below allows to recreate selected unit for chat commands
-	# such as autooil
-	# just as the chat action is executed
-	# without fully tracking selected units otherwise
-	# nor requiring selected unit consistency for replays
-	var selected_unit_uid: int = action[Action.Field.UID]
-	var action_select_unit: Action = ActionSelectUnit.make(selected_unit_uid)
-	ActionSelectUnit.execute(action_select_unit.serialize(), player)
-	
-	if chat_commands and hud:
-		ActionChat.execute(action, player, hud, chat_commands)
-
-
-func _execute_build_tower_action(action: Dictionary, player: Player):
-	var build_space: BuildSpace = _get_build_space()
-
-	if build_space:
-		ActionBuildTower.execute(action, player, build_space)
-
-
-func _execute_upgrade_tower_action(action: Dictionary, player: Player):
-	var select_unit: SelectUnit = _get_select_unit()
-
-	if select_unit:
-		ActionUpgradeTower.execute(action, player, select_unit)
-
-
-func _execute_transform_tower_action(action: Dictionary, player: Player):
-	ActionTransformTower.execute(action, player)
-
-
-func _execute_sell_tower_action(action: Dictionary, player: Player):
-	var build_space: BuildSpace = _get_build_space()
-
-	if build_space:
-		ActionSellTower.execute(action, player, build_space)
-
-
-func _execute_select_builder_action(action: Dictionary, player: Player):
-	ActionSelectBuilder.execute(action, player)
-
-
-func _execute_toggle_autocast_action(action: Dictionary, player: Player):
-	ActionToggleAutocast.execute(action, player)
-
-
-func _execute_consume_item_action(action: Dictionary, player: Player):
-	ActionConsumeItem.execute(action, player)
-
-
-func _execute_drop_item_action(action: Dictionary, player: Player):
-	ActionDropItem.execute(action, player)
-
-
-func _execute_move_item_action(action: Dictionary, player: Player):
-	ActionMoveItem.execute(action, player)
-
-
-func _execute_swap_items_action(action: Dictionary, player: Player):
-	ActionSwapItems.execute(action, player)
-
-
-func _execute_autofill_action(action: Dictionary, player: Player):
-	ActionAutofill.execute(action, player)
-
-
-func _execute_transmute_action(action: Dictionary, player: Player):
-	ActionTransmute.execute(action, player)
-
-
-func _execute_research_element_action(action: Dictionary, player: Player):
-	ActionResearchElement.execute(action, player)
-
-
-func _execute_roll_towers_action(action: Dictionary, player: Player):
-	ActionRollTowers.execute(action, player)
-
-
-func _execute_start_next_wave_action(action: Dictionary, player: Player):
-	ActionStartNextWave.execute(action, player)
-
-
-func _execute_autocast_action(action: Dictionary, player: Player):
-	ActionAutocast.execute(action, player)
-
-
-func _execute_focus_target_action(action: Dictionary, player: Player):
-	ActionFocusTarget.execute(action, player)
-
-
-func _execute_change_buffgroup_action(action: Dictionary, player: Player):
-	ActionChangeBuffgroup.execute(action, player)
-
-
-func _execute_select_unit_action(action: Dictionary, player: Player):
-	ActionSelectUnit.execute(action, player)
-
-
-func _execute_select_wisdom_upgrades_action(action: Dictionary, player: Player):
-	ActionSelectWisdomUpgrades.execute(action, player)
-
-
-func _execute_sort_item_stash_action(action: Dictionary, player: Player):
-	ActionSortItemStash.execute(action, player)
+	var game_client: GameClient = _get_game_client()
+	if is_instance_valid(game_client):
+		game_client.execute_replay_action(action)
 
 
 func _finish_playback():
+	if playback_state == PlaybackState.FINISHED:
+		return
+
 	playback_state = PlaybackState.FINISHED
 	playback_state_changed.emit(playback_state)
-
-	# Pause the game when replay finishes - use continue_pressed signal to pause the game in singleplayer
-	continue_pressed.emit()
 
 
 func _load_replay_file(replay_id: String) -> Dictionary:
 	# Load metadata first
 	var metadata_file: String = REPLAY_DIR + replay_id + ".json"
 	var metadata_content: String = FileAccess.get_file_as_string(metadata_file)
-	var metadata: Dictionary = JSON.parse_string(metadata_content)
+	var parsed_metadata: Variant = JSON.parse_string(metadata_content)
 
-	if !metadata:
+	if typeof(parsed_metadata) != TYPE_DICTIONARY:
 		return {}
+	var metadata: Dictionary = parsed_metadata
 
 	# Load actions from binary file
 	var actions: Array = []
 	var binary_file: String = REPLAY_DIR + replay_id + ".bin"
+	if !FileAccess.file_exists(binary_file):
+		return {}
 
-	if FileAccess.file_exists(binary_file):
-		var file: FileAccess = FileAccess.open(binary_file, FileAccess.READ)
-		if file:
-			# Read the number of actions first
-			var action_count: int = file.get_32()
+	var file: FileAccess = FileAccess.open(binary_file, FileAccess.READ)
+	if file == null:
+		return {}
 
-			# Read each action as a Godot variant (preserves types)
-			for i in range(action_count):
-				var action = file.get_var()
-				if action != null:
-					actions.append(action)
-
+	var action_count: int = file.get_32()
+	var previous_tick: int = -1
+	for _index in range(action_count):
+		var action: Variant = file.get_var()
+		if typeof(action) != TYPE_DICTIONARY:
 			file.close()
+			return {}
+
+		var action_tick: int = action.get("tick", -1)
+		if action_tick < previous_tick:
+			file.close()
+			return {}
+
+		previous_tick = action_tick
+		actions.append(action)
+
+	file.close()
 
 	metadata["actions"] = actions
 	metadata["state_files"] = _get_state_file_list_for_replay(replay_id)
@@ -624,10 +542,9 @@ func _calculate_replay_duration(replay_data: Dictionary) -> int:
 	if actions.is_empty():
 		return 0
 
-	var first_tick: int = actions[0].get("tick", 0)
 	var last_tick: int = actions[-1].get("tick", 0)
 
-	return (last_tick - first_tick) / 30  # Convert ticks to seconds
+	return (last_tick + 1) / 30  # Convert ticks to seconds
 
 
 func _get_initial_game_state() -> Dictionary:
@@ -642,9 +559,9 @@ func _get_initial_game_state() -> Dictionary:
 
 func _restore_initial_game_state(replay_data: Dictionary):
 	var initial_state: Dictionary = replay_data.get("initial_state", {})
+	_initial_game_state = initial_state.duplicate(true)
 
 	_restore_exp_password(initial_state.get("exp_password", ""))
-	_restore_static_var_states(initial_state.get("static_var_states", {}))
 	_restore_globals(initial_state.get("globals", {}))
 	_restore_wisdom_upgrades(initial_state.get("wisdom_upgrades", {}))
 
@@ -682,8 +599,15 @@ func _backup_data():
 
 
 func _restore_original_state():
-	# This would need to be implemented to restore state after replay
-	# For now, just reset to normal mode
+	if !_settings_before_playback.is_empty():
+		_restore_exp_password(_settings_before_playback.get("exp_password", ""))
+		_restore_wisdom_upgrades(_settings_before_playback.get("wisdom_upgrades", {}))
+		Settings.flush()
+
+	_clear_session_state()
+
+
+func _clear_session_state():
 	current_mode = ReplayMode.NONE
 	playback_state = PlaybackState.STOPPED
 	current_replay_file = ""
@@ -694,6 +618,12 @@ func _restore_original_state():
 
 	_playback_actions.clear()
 	_playback_tick = 0
+	_playback_duration_ticks = 0
+	_parent_replay_id = ""
+	_branch_tick = -1
+	_verification_start_tick = 0
+	_initial_game_state.clear()
+	_settings_before_playback.clear()
 	_checksum_period = 300
 	_detailed_checksums_enabled = true
 	_state_verifier.set_detailed_checksums_enabled(_detailed_checksums_enabled)
@@ -704,18 +634,28 @@ func _restore_original_state():
 
 func _serialize_static_var_states() -> Dictionary:
 	return {
-		"ItemContainerUidMax": ItemContainer._uid_max,
-		"ItemUidMax": Item._uid_max,
-		"AutocastUidMax": Autocast._uid_max,
-		"UnitUidMax": Unit._uid_max,
+		"ItemContainerUidMax": UidMaxTracker.get_uid_max(UidMaxTracker.Type.ITEM_CONTAINER),
+		"ItemUidMax": UidMaxTracker.get_uid_max(UidMaxTracker.Type.ITEM),
+		"AutocastUidMax": UidMaxTracker.get_uid_max(UidMaxTracker.Type.AUTOCAST),
+		"UnitUidMax": UidMaxTracker.get_uid_max(UidMaxTracker.Type.UNIT),
+		"ProjectileUidMax": UidMaxTracker.get_uid_max(UidMaxTracker.Type.PROJECTILE),
+		"ManualTimerUidMax": UidMaxTracker.get_uid_max(UidMaxTracker.Type.MANUAL_TIMER),
 	}
 
 
 func _restore_static_var_states(static_var_states: Dictionary):
-	ItemContainer._uid_max = static_var_states.get("ItemContainerUidMax", 1)
-	Item._uid_max = static_var_states.get("ItemUidMax", 1)
-	Autocast._uid_max = static_var_states.get("AutocastUidMax", 1)
-	Unit._uid_max = static_var_states.get("UnitUidMax", 1)
+	UidMaxTracker.reset()
+	_restore_uid_max(UidMaxTracker.Type.ITEM_CONTAINER, static_var_states.get("ItemContainerUidMax", 1))
+	_restore_uid_max(UidMaxTracker.Type.ITEM, static_var_states.get("ItemUidMax", 1))
+	_restore_uid_max(UidMaxTracker.Type.AUTOCAST, static_var_states.get("AutocastUidMax", 1))
+	_restore_uid_max(UidMaxTracker.Type.UNIT, static_var_states.get("UnitUidMax", 1))
+	_restore_uid_max(UidMaxTracker.Type.PROJECTILE, static_var_states.get("ProjectileUidMax", 1))
+	_restore_uid_max(UidMaxTracker.Type.MANUAL_TIMER, static_var_states.get("ManualTimerUidMax", 1))
+
+
+func _restore_uid_max(type: UidMaxTracker.Type, target_uid_max: int):
+	for _unused in range(1, maxi(target_uid_max, 1)):
+		UidMaxTracker.get_uid_max_and_increment(type)
 
 
 func _serialize_globals() -> Dictionary:
@@ -725,6 +665,8 @@ func _serialize_globals() -> Dictionary:
 		"difficulty": Globals.get_difficulty(),
 		"game_mode": Globals.get_game_mode(),
 		"team_mode": Globals.get_team_mode(),
+		"peer_id_list": Globals.get_game_peer_id_list().duplicate(),
+		"player_name_map": Globals._enet_peer_id_to_player_name.duplicate(true),
 	}
 
 
@@ -738,10 +680,18 @@ func _restore_exp_password(exp_password: String):
 
 func _restore_globals(globals_data: Dictionary):
 	Globals._origin_seed = globals_data.get("origin_seed", 0)
-	Globals._wave_count = globals_data.get("wave_count", 0)
-	Globals._difficulty = globals_data.get("difficulty", 0)
-	Globals._game_mode = globals_data.get("game_mode", 0)
-	Globals._team_mode = globals_data.get("team_mode", 0)
+	Globals._wave_count = globals_data.get("wave_count", Globals.get_wave_count())
+	Globals._difficulty = globals_data.get("difficulty", Globals.get_difficulty())
+	Globals._game_mode = globals_data.get("game_mode", Globals.get_game_mode())
+	Globals._team_mode = globals_data.get("team_mode", Globals.get_team_mode())
+	Globals._game_peer_id_list = globals_data.get("peer_id_list", []).duplicate()
+
+	# JSON object keys are strings, while runtime peer IDs are integers.
+	var recorded_player_name_map: Dictionary = globals_data.get("player_name_map", {})
+	var normalized_player_name_map: Dictionary = {}
+	for peer_id in recorded_player_name_map:
+		normalized_player_name_map[int(peer_id)] = recorded_player_name_map[peer_id]
+	Globals._enet_peer_id_to_player_name = normalized_player_name_map
 
 
 func _restore_wisdom_upgrades(upgrades_data: Dictionary):
@@ -749,13 +699,16 @@ func _restore_wisdom_upgrades(upgrades_data: Dictionary):
 
 
 func _generate_replay_id() -> String:
-	# Generate unique ID based on timestamp and random component
 	var timestamp: String = str(Time.get_unix_time_from_system()).replace(".", "_")
-	var random_component: String = str(randi() % 10000).pad_zeros(4)
-	return "replay_%s_%s" % [timestamp, random_component]
+	var candidate: String = "replay_%s_%d" % [timestamp, Time.get_ticks_usec()]
+	var suffix: int = 1
+	while FileAccess.file_exists(REPLAY_DIR + candidate + ".json") || FileAccess.file_exists(REPLAY_DIR + candidate + ".bin"):
+		candidate = "replay_%s_%d_%d" % [timestamp, Time.get_ticks_usec(), suffix]
+		suffix += 1
+	return candidate
 
 
-func _save_replay_metadata() -> void:
+func _save_replay_metadata() -> bool:
 	var metadata: Dictionary = {
 		"version": "1.0",
 		"replay_id": current_replay_file,
@@ -772,13 +725,19 @@ func _save_replay_metadata() -> void:
 		"recording_end_tick": _get_current_tick(),
 		"duration_ticks": _get_current_tick() - _recording_start_tick,
 		"initial_state": _initial_game_state,
+		"parent_replay_id": _parent_replay_id,
+		"branch_tick": _branch_tick,
+		"verification_start_tick": _verification_start_tick,
 	}
 
 	var metadata_file: String = REPLAY_DIR + current_replay_file + ".json"
 	var file: FileAccess = FileAccess.open(metadata_file, FileAccess.WRITE)
-	if file:
-		file.store_string(JSON.stringify(metadata, "\t"))
-		file.close()
+	if file == null:
+		return false
+
+	file.store_string(JSON.stringify(metadata, "\t"))
+	file.close()
+	return true
 
 
 func _get_state_file_list() -> Array:

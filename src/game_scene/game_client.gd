@@ -100,8 +100,15 @@ func set_paused_by_host(value: bool):
 
 # Send action from client to host
 func add_action(action: Action):
+	if _replay_manager.should_suppress_live_actions():
+		return
+
 	var serialized_action: Dictionary = action.serialize()
 	_game_host.receive_action.rpc_id(1, serialized_action)
+
+
+func execute_replay_action(action: Dictionary):
+	_execute_action(action, true)
 
 
 # Returns current tick number. Used for deterministic
@@ -399,7 +406,7 @@ func _calculate_game_state_checksum():
 # possible to pass custom classes through RPC. Also, some
 # execute()'s require extra args like "map" which is a
 # further obstruction.
-func _execute_action(action: Dictionary):
+func _execute_action(action: Dictionary, is_replay_action: bool = false):
 	var player_id: int = action[Action.Field.PLAYER_ID] as int
 	var player: Player = PlayerManager.get_player(player_id)
 
@@ -411,10 +418,15 @@ func _execute_action(action: Dictionary):
 	var action_type: Action.Type = action[Action.Field.TYPE]
 
 	# Log action for replay if in recording mode and action is replayable
-	if _replay_manager and _replay_manager.is_recording():
+	if !is_replay_action && _replay_manager.is_recording():
 		var action_obj: Action = Action.new(action)
 		if action_obj.is_replayable():
 			_replay_manager._record_action(action)
+
+	if is_replay_action && action_type == Action.Type.CHAT:
+		var selected_unit_uid: int = action.get(Action.Field.UID, -1)
+		var select_action: Action = ActionSelectUnit.make(selected_unit_uid)
+		ActionSelectUnit.execute(select_action.serialize(), player)
 
 	match action_type:
 		Action.Type.IDLE: return

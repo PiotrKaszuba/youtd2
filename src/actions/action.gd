@@ -87,7 +87,7 @@ static var excluded_types: Array = [
 		Type.SELECT_WISDOM_UPGRADES,
 ]
 
-static func is_replayable_type(type: Type):
+static func is_replayable_type(type: Type) -> bool:
 	return not (type in Action.excluded_types)
 
 func is_replayable() -> bool:
