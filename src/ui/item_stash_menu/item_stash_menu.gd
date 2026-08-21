@@ -242,7 +242,8 @@ func _on_item_button_right_clicked(item_button: ItemButton):
 
 func _on_item_button_ctrl_right_clicked(item_button: ItemButton):
 	var item: Item = item_button.get_item()
-	item.toggle_horadric_lock()
+	var enabled: bool = !item.get_horadric_lock_is_enabled()
+	EventBus.player_requested_to_set_horadric_lock.emit(item, enabled)
 
 
 func _on_recipe_button_pressed(recipe: HoradricCube.Recipe):
