@@ -308,7 +308,7 @@ func _get_tower_data(tower: Tower) -> Dictionary:
 		"position_x": tower.position.x,
 		"position_y": tower.position.y,
 		"player_id": tower.get_player().get_id(),
-		"experience": tower._experience,
+		"experience_centi": roundi(tower.get_exp() * 100.0),
 		"damage_dealt": tower._damage_dealt_total,
 	}
 

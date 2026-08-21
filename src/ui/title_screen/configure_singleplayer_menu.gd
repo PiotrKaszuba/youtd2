@@ -62,6 +62,11 @@ func get_selected_replay_id() -> String:
 	return ""
 
 
+func show_replay_selection():
+	_load_replay_button.button_pressed = true
+	_update_mode_display()
+
+
 #########################
 ###      Private      ###
 #########################

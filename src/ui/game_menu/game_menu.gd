@@ -12,11 +12,15 @@ enum Tab {
 signal continue_pressed()
 signal quit_pressed()
 signal save_replay_pressed()
+signal take_control_pressed()
 
 
 @export var _tab_container: TabContainer
 @export var _settings_menu: SettingsMenu
 @export var _encyclopedia_placeholder: PanelContainer
+@export var _continue_button: Button
+@export var _save_replay_button: Button
+@export var _take_control_button: Button
 
 var _encyclopedia_instance: EncyclopediaMenu = null
 
@@ -27,6 +31,19 @@ func _ready():
 
 func switch_to_help_menu():
 	_tab_container.current_tab = Tab.HELP
+
+
+func update_replay_controls(mode: ReplayManager.ReplayMode, state: ReplayManager.PlaybackState):
+	var is_playback: bool = mode == ReplayManager.ReplayMode.PLAYBACK
+	var can_take_control: bool = is_playback && state in [
+		ReplayManager.PlaybackState.PLAYING,
+		ReplayManager.PlaybackState.PAUSED,
+		ReplayManager.PlaybackState.FINISHED,
+	]
+
+	_take_control_button.visible = can_take_control
+	_save_replay_button.visible = mode == ReplayManager.ReplayMode.RECORDING
+	_continue_button.visible = state != ReplayManager.PlaybackState.FINISHED
 
 
 func _on_continue_button_pressed():
@@ -72,6 +89,10 @@ func _on_quit_button_pressed():
 
 func _on_save_replay_button_pressed():
 	save_replay_pressed.emit()
+
+
+func _on_take_control_button_pressed():
+	take_control_pressed.emit()
 
 
 func _on_encyclopedia_button_pressed() -> void:
