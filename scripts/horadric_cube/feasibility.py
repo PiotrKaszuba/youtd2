@@ -246,11 +246,10 @@ def _check_usable_feasibility(
 		# Without inventory information, assume usable slots are structurally feasible.
 		return True
 
-	explicit_set = {int(x) for x in explicit_ingredient_ids}
 	explicit_usable_count = 0
 
-	for item_id in explicit_set:
-		item = item_db.items.get(item_id)
+	for item_id in explicit_ingredient_ids:
+		item = item_db.items.get(int(item_id))
 		if item is None:
 			continue
 		if item.is_usable and item.rarity == ingredient_rarity:
@@ -268,8 +267,6 @@ def _check_usable_feasibility(
 		if not item.is_usable:
 			continue
 		if item.rarity != ingredient_rarity:
-			continue
-		if item.id in explicit_set:
 			continue
 		available_usable += inventory.get(item.id, 0)
 		if available_usable >= missing_usable:

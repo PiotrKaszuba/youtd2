@@ -92,6 +92,23 @@ def _build_synthetic_db() -> ItemDatabase:
 			name="Perm L1",
 			description="",
 		),
+		6: Item(
+			id=6,
+			name_english="Usable",
+			item_type=ItemType.OIL,
+			author="test",
+			rarity=Rarity.RARE,
+			cost=0,
+			required_wave_level=0,
+			specials="",
+			ability_list="",
+			aura_list="",
+			autocast_list="",
+			script_path="",
+			icon="",
+			name="Usable",
+			description="",
+		),
 		99: Item(
 			id=99,
 			name_english="Target",
@@ -182,6 +199,35 @@ def test_is_avg_level_feasible_uses_available_item_counts():
 		inventory=inventory,
 		avg_permanent_level=0,
 		explicit_ingredient_ids=[],
+	)
+
+
+def test_is_avg_level_feasible_counts_explicit_usable_copies():
+	item_db = _build_synthetic_db()
+	recipe = Recipe(
+		id=2,
+		name_english="Usable Recipe",
+		permanent_count=1,
+		usable_count=3,
+		result_item_type=ResultItemType.PERMANENT,
+		result_count=1,
+		rarity_change=0,
+		lvl_bonus_min=0,
+		lvl_bonus_max=0,
+		unlocked_by_backpacker=False,
+		display_name="Usable Recipe",
+		description="",
+	)
+
+	# Two explicit copies consume two of three oils. The remaining copy must
+	# still fill the final usable slot after duplicate explicit IDs are counted.
+	assert is_avg_level_feasible(
+		target_item_id=99,
+		recipe=recipe,
+		item_db=item_db,
+		inventory={1: 1, 6: 3},
+		avg_permanent_level=2,
+		explicit_ingredient_ids=[6, 6],
 	)
 
 
