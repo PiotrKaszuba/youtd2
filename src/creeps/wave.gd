@@ -271,7 +271,7 @@ static func _calculate_base_hp(level: int, difficulty: Difficulty.enm, armor_typ
 	var constant_multiplier = 1.05
 	var constant_multiplier_total_wave = Constants.WAVE_COUNT_NEVERENDING + constant_multiplier_bonus_wave
 	var resulting_total_multiplier = pow(constant_multiplier, max(0, level - constant_multiplier_total_wave))
-	
+
 	var other_formulas_effective_level = min(level, constant_multiplier_total_wave)
 
 	#	NOTE: extra hp multiplier can be found in jass code but
@@ -279,13 +279,13 @@ static func _calculate_base_hp(level: int, difficulty: Difficulty.enm, armor_typ
 #	health formula. Search for "(.9-" strings to find it in
 #	multiple locations.
 	var extra_hp_multiplier: float = (0.9 - (other_formulas_effective_level * 0.002))
-	
-		
+
+
 	if wave_is_bonus:
 		var bonus_wave = other_formulas_effective_level - Constants.WAVE_COUNT_NEVERENDING
 		var extra_hp_multiplier_add = pow(1.0001, pow(max(0, bonus_wave) / 2.0, 2.6)) - 1.0
 		extra_hp_multiplier += extra_hp_multiplier_add
-		
+
 	var j: int = other_formulas_effective_level - 1
 	var health: float = a + j * (b + j * (c + j * (d + j * (e + j * (f + j * g)))))
 	health = health * extra_hp_multiplier * resulting_total_multiplier
