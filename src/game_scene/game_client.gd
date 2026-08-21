@@ -462,6 +462,7 @@ func _execute_action(action: Dictionary, is_replay_action: bool = false):
 		Action.Type.SELECT_WISDOM_UPGRADES: ActionSelectWisdomUpgrades.execute(action, player)
 		Action.Type.SELECT_UNIT: ActionSelectUnit.execute(action, player)
 		Action.Type.SORT_ITEM_STASH: ActionSortItemStash.execute(action, player)
+		Action.Type.SET_HORADRIC_LOCK: ActionSetHoradricLock.execute(action, player)
 
 
 func _update_state():

@@ -29,6 +29,7 @@ enum Field {
 	BUFFGROUP_MODE,
 	ELEMENT,
 	WISDOM_UPGRADES,
+	ENABLED,
 }
 
 enum Type {
@@ -57,6 +58,7 @@ enum Type {
 	CHANGE_BUFFGROUP,
 	SELECT_UNIT,
 	SORT_ITEM_STASH,
+	SET_HORADRIC_LOCK,
 }
 
 

@@ -102,7 +102,14 @@ func get_is_fresh() -> bool:
 
 
 func toggle_horadric_lock():
-	_horadric_lock_is_enabled = !_horadric_lock_is_enabled
+	set_horadric_lock(!_horadric_lock_is_enabled)
+
+
+func set_horadric_lock(enabled: bool):
+	if _horadric_lock_is_enabled == enabled:
+		return
+
+	_horadric_lock_is_enabled = enabled
 	horadric_lock_changed.emit()
 
 
