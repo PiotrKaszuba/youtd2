@@ -95,9 +95,9 @@ func get_random_special_count(level: int) -> int:
 	var wave_is_bonus: bool = Utils.wave_is_bonus(level)
 	var count_chance_map: Dictionary
 	if wave_is_bonus:
-		count_chance_map = _special_count_chances
-	else:
 		count_chance_map = _special_count_chances_for_bonus_waves
+	else:
+		count_chance_map = _special_count_chances
 
 	var special_count: int = Utils.random_weighted_pick(Globals.synced_rng, count_chance_map)
 
