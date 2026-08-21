@@ -101,6 +101,13 @@ func _ready():
 ###       Public      ###
 #########################
 
+func process_replay_local_command(player: Player, command: String):
+	var command_split: Array = command.split(" ")
+	var command_main: String = command_split[0]
+	if GAMESPEED.has(command_main):
+		_command_gamespeed(player, command_split.slice(1))
+
+
 func process_command(player: Player, command: String):
 	var command_split: Array = command.split(" ")
 	var command_main: String = command_split[0]

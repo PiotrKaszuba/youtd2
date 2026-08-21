@@ -817,7 +817,9 @@ func _on_player_selected_builder():
 	_builder_menu = null
 
 	var replay_is_running: bool = _replay_manager.should_suppress_live_actions()
-	_set_ui_input_enabled(!replay_is_running)
+	# Playback remains locally interactive for inspection. GameClient is the
+	# authoritative boundary that suppresses gameplay actions during a replay.
+	_set_ui_input_enabled(true)
 
 	var wisdom_upgrades: Dictionary = Settings.get_wisdom_upgrades()
 	var action: Action = ActionSelectWisdomUpgrades.make(wisdom_upgrades)
@@ -955,8 +957,9 @@ func _update_ui_for_replay_mode(mode: ReplayManager.ReplayMode):
 		ReplayManager.ReplayMode.RECORDING:
 			pass
 		ReplayManager.ReplayMode.PLAYBACK:
-			# Playback mode - lock player actions
-			_set_ui_input_enabled(false)
+			# Keep local inspection controls available. Authoritative gameplay
+			# actions remain suppressed by GameClient until control is taken.
+			_set_ui_input_enabled(true)
 
 
 func _update_ui_for_playback_state(state: ReplayManager.PlaybackState):
@@ -970,9 +973,9 @@ func _update_ui_for_playback_state(state: ReplayManager.PlaybackState):
 		ReplayManager.PlaybackState.PAUSED:
 			_set_game_menu_open(true)
 		ReplayManager.PlaybackState.FINISHED:
-			# Keep gameplay input locked until the player explicitly takes control.
+			# Keep the finished position inspectable until the player takes control.
 			_set_game_menu_open(true)
-			_set_ui_input_enabled(false)
+			_set_ui_input_enabled(true)
 
 
 func _sync_replay_ui_state():

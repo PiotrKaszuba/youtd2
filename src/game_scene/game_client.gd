@@ -100,10 +100,11 @@ func set_paused_by_host(value: bool):
 
 # Send action from client to host
 func add_action(action: Action):
+	var serialized_action: Dictionary = action.serialize()
 	if _replay_manager.should_suppress_live_actions():
+		_process_replay_local_action(serialized_action)
 		return
 
-	var serialized_action: Dictionary = action.serialize()
 	_game_host.receive_action.rpc_id(1, serialized_action)
 
 
@@ -201,6 +202,15 @@ func receive_drop_player_notification(id: int):
 #########################
 ###      Private      ###
 #########################
+
+func _process_replay_local_action(action: Dictionary):
+	if action.get(Action.Field.TYPE, Action.Type.NONE) != Action.Type.CHAT:
+		return
+
+	var player: Player = PlayerManager.get_local_player()
+	var chat_message: String = action.get(Action.Field.CHAT_MESSAGE, "")
+	_chat_commands.process_replay_local_command(player, chat_message)
+
 
 # NOTE: buffer value rises instantly but lowers gradually.
 # This is to prevent abrupt changes in input latency.
