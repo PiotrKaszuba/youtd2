@@ -262,12 +262,21 @@ func get_replay_list() -> Array:
 
 
 func save_replay_from_current_game() -> String:
-	if current_mode == ReplayMode.RECORDING:
-		# Save the current recording and return the replay ID
-		var binary_file_path: String = _save_replay()
-		return binary_file_path
+	if current_mode != ReplayMode.RECORDING:
+		return ""
 
-	return ""
+	var saved_replay_id: String = _save_replay()
+	if saved_replay_id.is_empty():
+		return ""
+
+	# Keep the saved replay immutable while recording continues. Periodic state
+	# files use the active replay ID, so carry them into the next snapshot's
+	# namespace before rotating the ID.
+	var next_replay_id: String = _generate_replay_id()
+	_copy_replay_state_files(saved_replay_id, next_replay_id)
+	current_replay_file = next_replay_id
+
+	return saved_replay_id
 
 func get_checksum_filename(tick: int) -> String:
 	return STATE_DIR + current_replay_file + "-%d.json" % tick
@@ -396,6 +405,25 @@ func _record_game_state_checksum(tick: int):
 	if file:
 		file.store_string(JSON.stringify(checksum_data))
 		file.close()
+
+
+func _copy_replay_state_files(source_replay_id: String, target_replay_id: String):
+	var dir: DirAccess = DirAccess.open(STATE_DIR)
+	if dir == null:
+		return
+
+	var source_prefix: String = source_replay_id + "-"
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while !file_name.is_empty():
+		if !dir.current_is_dir() && file_name.begins_with(source_prefix) && file_name.ends_with(".json"):
+			var target_file_name: String = target_replay_id + file_name.trim_prefix(source_replay_id)
+			var copy_error: Error = DirAccess.copy_absolute(STATE_DIR + file_name, STATE_DIR + target_file_name)
+			if copy_error != OK:
+				push_warning("Failed to copy replay state file %s (error %d)." % [file_name, copy_error])
+
+		file_name = dir.get_next()
+	dir.list_dir_end()
 
 
 func _save_replay() -> String:

@@ -920,7 +920,7 @@ func _on_game_menu_quit_pressed():
 
 func _on_game_menu_save_replay():
 	if _replay_manager:
-		var replay_path: String = _replay_manager.stop_recording()
+		var replay_path: String = _replay_manager.save_replay_from_current_game()
 		if !replay_path.is_empty():
 			Messages.add_normal(PlayerManager.get_local_player(), "Replay saved to: " + replay_path)
 		else:
