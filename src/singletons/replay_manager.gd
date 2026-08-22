@@ -38,6 +38,8 @@ var _initial_game_state: Dictionary = {}
 var _playback_actions: Array = []
 var _playback_tick: int = 0
 var _playback_duration_ticks: int = 0
+var _last_playback_tick: int = -1
+var _playback_checksum_ticks: Dictionary = {}
 
 # Branch metadata. These fields are additive and old replay files remain valid.
 var _parent_replay_id: String = ""
@@ -135,6 +137,12 @@ func start_playback(replay_id: String) -> bool:
 	# Load replay state
 	_playback_actions = replay_data.get("actions", [])
 	_playback_duration_ticks = replay_data.get("duration_ticks", 0)
+	_last_playback_tick = -1
+	_playback_checksum_ticks.clear()
+	for state_file in replay_data.get("state_files", []):
+		var state_tick: int = state_file.get("tick", -1)
+		if state_tick >= 0:
+			_playback_checksum_ticks[state_tick] = true
 	if _playback_duration_ticks <= 0 && !_playback_actions.is_empty():
 		_playback_duration_ticks = _playback_actions.back().get("tick", 0) + 1
 	_initial_game_state = replay_data.get("initial_state", {}).duplicate(true)
@@ -186,14 +194,18 @@ func branch_recording_from_playback() -> bool:
 		_recorded_actions.append(_playback_actions[index].duplicate(true))
 	_recording_start_tick = 0
 	_branch_tick = _get_current_tick()
-	_verification_start_tick = _branch_tick
 	_last_checksum_tick = _branch_tick
 	_parent_replay_id = source_replay_id
-	current_replay_file = _generate_replay_id()
+	var branched_replay_id: String = _generate_replay_id()
+	if _last_playback_tick >= 0:
+		_copy_replay_state_files(source_replay_id, branched_replay_id, _last_playback_tick)
+	current_replay_file = branched_replay_id
 
 	_playback_actions.clear()
 	_playback_tick = 0
 	_playback_duration_ticks = 0
+	_last_playback_tick = -1
+	_playback_checksum_ticks.clear()
 	current_mode = ReplayMode.RECORDING
 	playback_state = PlaybackState.STOPPED
 
@@ -359,15 +371,14 @@ func _update_playback():
 		else:
 			break
 
-	# Verify state against recorded checksums periodically
-	var should_generate: bool = _should_generate_checksum()
-	var is_checksum_available: bool = is_tick_checksum_available(current_tick)
-	if should_generate:
+	# Branched replays can contain inherited and newly recorded checkpoints on
+	# different tick grids. Verify the actual recorded ticks instead of assuming
+	# that every state file shares one uninterrupted checksum schedule.
+	if current_tick >= _verification_start_tick && _playback_checksum_ticks.has(current_tick):
 		_last_checksum_tick = _get_current_tick()
-		# A derived replay has no valid checksum files for its inherited prefix.
-		# Resume verification only at the recorded derived-state boundary.
-		if current_tick >= _verification_start_tick && is_checksum_available:
-			verify_replay_state_at_tick(current_tick)
+		verify_replay_state_at_tick(current_tick)
+
+	_last_playback_tick = current_tick
 
 	# The final recorded tick must update the world before the SceneTree is paused
 	# by the FINISHED callback, so complete when this tick reaches the duration.
@@ -407,7 +418,7 @@ func _record_game_state_checksum(tick: int):
 		file.close()
 
 
-func _copy_replay_state_files(source_replay_id: String, target_replay_id: String):
+func _copy_replay_state_files(source_replay_id: String, target_replay_id: String, max_tick: int = -1):
 	var dir: DirAccess = DirAccess.open(STATE_DIR)
 	if dir == null:
 		return
@@ -417,10 +428,12 @@ func _copy_replay_state_files(source_replay_id: String, target_replay_id: String
 	var file_name: String = dir.get_next()
 	while !file_name.is_empty():
 		if !dir.current_is_dir() && file_name.begins_with(source_prefix) && file_name.ends_with(".json"):
-			var target_file_name: String = target_replay_id + file_name.trim_prefix(source_replay_id)
-			var copy_error: Error = DirAccess.copy_absolute(STATE_DIR + file_name, STATE_DIR + target_file_name)
-			if copy_error != OK:
-				push_warning("Failed to copy replay state file %s (error %d)." % [file_name, copy_error])
+			var state_tick: int = _get_state_file_tick(source_replay_id, file_name)
+			if state_tick >= 0 && (max_tick < 0 || state_tick <= max_tick):
+				var target_file_name: String = target_replay_id + file_name.trim_prefix(source_replay_id)
+				var copy_error: Error = DirAccess.copy_absolute(STATE_DIR + file_name, STATE_DIR + target_file_name)
+				if copy_error != OK:
+					push_warning("Failed to copy replay state file %s (error %d)." % [file_name, copy_error])
 
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -532,23 +545,32 @@ func _load_replay_file(replay_id: String) -> Dictionary:
 
 func _get_state_file_list_for_replay(replay_id: String) -> Array:
 	var state_files: Array = []
-	var metadata_file: String = REPLAY_DIR + replay_id + ".json"
-	var metadata_content: String = FileAccess.get_file_as_string(metadata_file)
-	var metadata: Dictionary = JSON.parse_string(metadata_content)
+	var dir: DirAccess = DirAccess.open(STATE_DIR)
+	if dir == null:
+		return state_files
 
-	if metadata:
-		var start_tick: int = metadata.get("recording_start_tick", 0)
-		var checksum_period: int = metadata.get("checksum_period", 30)
-
-		for tick in range(start_tick, metadata.get("recording_end_tick", start_tick) + 1, checksum_period):
-			var state_file: String = replay_id + "-%d.json" % tick
-			if FileAccess.file_exists(STATE_DIR + state_file):
+	var source_prefix: String = replay_id + "-"
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while !file_name.is_empty():
+		if !dir.current_is_dir() && file_name.begins_with(source_prefix) && file_name.ends_with(".json"):
+			var state_tick: int = _get_state_file_tick(replay_id, file_name)
+			if state_tick >= 0:
 				state_files.append({
-					"tick": tick,
-					"file": state_file,
+					"tick": state_tick,
+					"file": file_name,
 				})
 
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	state_files.sort_custom(func(a, b): return a["tick"] < b["tick"])
+
 	return state_files
+
+
+func _get_state_file_tick(replay_id: String, file_name: String) -> int:
+	var tick_text: String = file_name.trim_prefix(replay_id + "-").trim_suffix(".json")
+	return tick_text.to_int() if tick_text.is_valid_int() else -1
 
 
 func _get_replay_info(replay_id: String) -> Dictionary:
@@ -653,6 +675,8 @@ func _clear_session_state():
 	_playback_actions.clear()
 	_playback_tick = 0
 	_playback_duration_ticks = 0
+	_last_playback_tick = -1
+	_playback_checksum_ticks.clear()
 	_parent_replay_id = ""
 	_branch_tick = -1
 	_verification_start_tick = 0
