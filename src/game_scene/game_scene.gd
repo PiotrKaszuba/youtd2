@@ -887,6 +887,7 @@ func _quit_to_title():
 	_save_player_exp_on_quit()
 	_cleanup_all_objects()
 	OnlineMatch.leave()
+	PlayerManager.reset()
 	get_tree().set_pause(false)
 #	NOTE: need to use load() here instead of preload()
 #	because preload() causes an error here since Godot
