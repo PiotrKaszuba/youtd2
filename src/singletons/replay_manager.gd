@@ -479,6 +479,12 @@ func _finish_playback():
 	playback_state = PlaybackState.FINISHED
 	playback_state_changed.emit(playback_state)
 
+	# Natural completion hands the reached game state to the player. The
+	# FINISHED signal is emitted first so the UI can report completion and pause
+	# before the mode transitions to recording.
+	if !branch_recording_from_playback():
+		push_error("Failed to transfer control after replay completion.")
+
 
 func _load_replay_file(replay_id: String) -> Dictionary:
 	# Load metadata first

@@ -973,7 +973,7 @@ func _update_ui_for_playback_state(state: ReplayManager.PlaybackState):
 		ReplayManager.PlaybackState.PAUSED:
 			_set_game_menu_open(true)
 		ReplayManager.PlaybackState.FINISHED:
-			# Keep the finished position inspectable until the player takes control.
+			Messages.add_normal(PlayerManager.get_local_player(), "Replay finished. You now have control.")
 			_set_game_menu_open(true)
 			_set_ui_input_enabled(true)
 
