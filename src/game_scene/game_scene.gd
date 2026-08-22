@@ -934,6 +934,7 @@ func _on_game_menu_take_control_pressed():
 		Messages.add_error(PlayerManager.get_local_player(), "Replay control could not be transferred.")
 		return
 
+	Messages.add_normal(PlayerManager.get_local_player(), "Replay interrupted. You now have control.")
 	_set_ui_input_enabled(true)
 	if _game_menu.visible:
 		_toggle_game_menu()
