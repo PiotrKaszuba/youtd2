@@ -70,6 +70,13 @@ func get_undropped_player_list() -> Array[Player]:
 	return _player_list.filter(func(p): return !p._is_dropped)
 
 func reset():
+	# PlayerManager is an autoload, so its player children outlive GameScene.
+	# Remove them immediately to keep their item subtrees out of SceneTree
+	# groups while the next game is initialized. queue_free() alone is deferred.
+	for player in get_children():
+		remove_child(player)
+		player.queue_free()
+
 	_id_to_player_map = {}
 	_enet_peer_id_to_player_map = {}
 	_nakama_user_id_to_player_map = {}
